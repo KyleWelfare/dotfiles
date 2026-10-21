@@ -28,6 +28,11 @@ async function run(argv: string[], env: Record<string, string> = {}) {
   return { exitCode, stdout, stderr }
 }
 
+// PR titles and logins come from other people and end up drawn in the terminal and written to the log, so
+// control characters (escape sequences, newlines) are dropped from every string gh returns.
+const stripControl = (_key: string, value: unknown) =>
+  typeof value === 'string' ? value.replace(/[\t\n\r]+/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, '') : value
+
 async function ghText(args: string[], env: Record<string, string>): Promise<string | null> {
   try {
     const { exitCode, stdout } = await run(['gh', ...args], env)
@@ -41,7 +46,7 @@ async function ghJson<T>(args: string[], env: Record<string, string>): Promise<G
   try {
     const { exitCode, stdout, stderr } = await run(['gh', ...args], env)
     if (exitCode !== 0) return { error: stderr.trim().split('\n')[0] || `gh exited ${exitCode}` }
-    return { value: JSON.parse(stdout) as T }
+    return { value: JSON.parse(stdout, stripControl) as T }
   } catch (error) {
     return { error: error instanceof Error ? error.message : String(error) }
   }
