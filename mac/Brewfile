@@ -1,0 +1,26 @@
+# brew bundle --file ~/dotfiles/mac/Brewfile
+cask "wezterm"
+cask "font-hack-nerd-font"
+cask "claude-code"
+
+brew "git"
+brew "git-lfs"
+brew "gh"
+brew "jq"
+brew "bun"
+
+# Shell
+brew "powerlevel10k"
+brew "zsh-autosuggestions"
+brew "zsh-syntax-highlighting"
+brew "zoxide"
+brew "fzf"
+brew "fd"
+brew "bat"
+brew "ripgrep"
+brew "micro"
+
+# Git and files
+brew "lazygit"
+brew "git-delta"
+brew "broot"

@@ -1,42 +1,59 @@
 # dotfiles
 
-WezTerm + shell setup shared across Windows and Mac machines.
+My terminal setup for Mac and Windows: WezTerm, zsh or PowerShell, and Claude Code, with a work-log dashboard that opens as a WezTerm tab.
 
-```
-shared/   used on every OS: wezterm.lua, gitconfig, git-ignore, ssh-config, claude/statusline.sh,
-          claude/mods/worklog (Claude Code mod), worklog-dash (dashboard app)
-windows/  PowerShell profile, oh-my-posh theme, winget list, bootstrap.ps1
-mac/      zshrc, p10k theme, Claude wezterm-flag hook, install.sh
-```
+![Dashboard tab: today's plan, PRs and recent events on top, a file tree on the left, Claude on the right](docs/dashboard.png)
 
-Configs are symlinked into place, so editing one on any machine edits the repo. Commit and pull to sync.
+Only the focused pane (Claude, here) is in full color; the rest dim, so you can always tell where your keys go.
 
-## Windows
+- **One WezTerm config for both OSes.** Keys sit in the same physical spot on each keyboard (Mac Cmd is Windows Alt), and the layout is saved and restored across restarts.
+- **Claude Code in the terminal.** Open a tab running Claude in the current folder with one key. On Mac, background tabs show when Claude is working and when it needs you, and Claude's status line shows the folder, branch, model, context left and today's plan progress.
+- **A dashboard tab.** Today's plan, your open PRs and review requests, and recent work-log events sit above a file tree and a Claude session, all rooted at the current repo.
+- **Shell helpers.** A p10k prompt (oh-my-posh on Windows), fuzzy file open and live content search, zoxide, lazygit, delta diffs, and git's GitHub login following gh's active account.
 
-Turn on Developer Mode first (Settings > System > For developers), or symlinks fall back to copies.
+Configs are symlinked into place, so editing one on any machine edits the repo. Fork it first if you want to keep your own changes.
 
-```powershell
-winget install --id Git.Git -e; winget install --id GitHub.cli -e
-# open a new shell so git/gh are on PATH
-gh auth login
-gh repo clone dotfiles $HOME\dotfiles
-powershell -ExecutionPolicy Bypass -File $HOME\dotfiles\windows\bootstrap.ps1
-```
+## Install
 
-Existing files are moved to `<name>.bak-<timestamp>` before anything gets linked. The script is safe to rerun.
-
-## Mac
+### Mac
 
 ```bash
 gh repo clone KyleWelfare/dotfiles ~/dotfiles
+brew bundle --file ~/dotfiles/mac/Brewfile
 ~/dotfiles/mac/install.sh
 ```
 
-Expects the tools from `windows/winget.txt` already installed via Homebrew (plus `powerlevel10k`, `zsh-autosuggestions`, `zsh-syntax-highlighting`, `font-hack-nerd-font`). Existing files are moved to `<name>.bak-<timestamp>` before linking; safe to rerun. `ssh-config` isn't linked on Mac.
+### Windows
+
+Turn on Developer Mode first (Settings > System > For developers), or configs are copied instead of linked.
+
+```powershell
+winget install --id Git.Git -e; winget install --id GitHub.cli -e
+# open a new shell so git and gh are on PATH
+gh auth login
+gh repo clone KyleWelfare/dotfiles $HOME\dotfiles
+powershell -ExecutionPolicy Bypass -File $HOME\dotfiles\windows\bootstrap.ps1
+```
+
+`bootstrap.ps1` installs everything in `windows/winget.txt`, plus bun and Claude Code.
+
+Both scripts move an existing file to `<name>.bak-<timestamp>` before linking over it, and are safe to rerun. Restart WezTerm afterwards.
+
+## Setup questions
+
+The first install asks a few questions, so nothing personal or machine-specific has to live in the repo. The answers go to untracked files:
+
+| File | Holds |
+|---|---|
+| `~/.config/dotfiles/local.json` | Work log folder, PR sync, ticket links, and the repo folders the dashboard's file tree can jump to |
+| `~/.gitconfig.local` | Git `user.name` and `user.email` |
+| `~/.ssh/config.local` (Windows) | One SSH host |
+
+Every answer is optional. Enter keeps the value shown in brackets and `-` clears it. Rerun with `mac/install.sh --configure`, `bootstrap.ps1 -Configure` or `bun ~/dotfiles/shared/setup.ts`.
+
+Anything else machine-specific goes in `~/.gitconfig.local` or, on Mac, `~/.zshrc.local`, both loaded last.
 
 ## Keybinds
-
-WezTerm (`shared/wezterm.lua`). Keys sit in the same physical spot on both: Mac Cmd is Windows Alt.
 
 | Action | Mac | Windows |
 |---|---|---|
@@ -54,7 +71,7 @@ WezTerm (`shared/wezterm.lua`). Keys sit in the same physical spot on both: Mac 
 | New tab running Claude here | Cmd+Shift+T | Alt+Shift+T |
 | Start Claude in this pane | Cmd+Shift+C | Alt+Shift+C |
 | Dashboard tab | Cmd+Shift+B | Alt+Shift+B |
-| Re-root the dashboard's file tree at another repo | Cmd+Shift+O | Alt+Shift+O |
+| Point the dashboard's file tree at another repo | Cmd+Shift+O | Alt+Shift+O |
 | Command palette | Cmd+Shift+P | Alt+Shift+P |
 | Workspace switcher (Windows: also shells) | Cmd+Shift+S | Alt+Shift+S |
 | Save session / restore a saved one | Cmd+Ctrl+S / Cmd+Ctrl+R | Alt+Ctrl+S / Alt+Ctrl+R |
@@ -65,22 +82,71 @@ WezTerm (`shared/wezterm.lua`). Keys sit in the same physical spot on both: Mac 
 | Font size bigger / smaller / reset | Cmd+= / Cmd+- / Cmd+0 | Ctrl+= / Ctrl+- / Ctrl+0 |
 | Open a link | Click (Shift+click where an app takes the mouse) | Same |
 
-A zoomed pane gets a pink border and a `PANE ZOOMED` badge, so the hidden panes aren't forgotten. On Mac, background tabs running Claude show a wave while it works, then a red dot when it needs you (dimmed once you've looked), with a toast if WezTerm isn't focused. The layout is saved every 15 minutes and on focus loss, and restored on launch.
+A zoomed pane gets a pink border and a `PANE ZOOMED` badge, so the panes hidden behind it aren't forgotten. The layout is saved every 15 minutes and whenever WezTerm loses focus, and comes back on launch (running programs don't).
 
-In the shell: `f` fuzzy-opens a file, `rgf` searches file contents live, `z <dir>` jumps to a directory, `lg` opens lazygit, `gc <message>` adds, commits and pushes, and on Mac `ghSwitch` swaps gh (and git's GitHub login) between two accounts.
+### Claude tab indicators (Mac)
+
+![A background tab's wave while Claude works, then a red dot when it needs you](docs/tabs.gif)
+
+A background tab running Claude shows a moving wave while it works and a red dot when it's waiting on you, with a toast if WezTerm isn't focused. The dot dims once you've looked at the tab.
+
+### Shell
+
+| Command | Does |
+|---|---|
+| `f` | Fuzzy-pick a file (with a preview) and open it in micro |
+| `rgf [regex]` | Live content search; Enter opens the match at its line |
+| `z <part of a path>` | Jump to a directory you've been in |
+| `lg` | lazygit |
+| `gc <message>` | Add everything, commit and push |
+| `ghSwitch` (Mac) | Swap gh between two logged-in accounts; git's GitHub login follows |
+| `c` (Mac) | `claude` |
+| `ai` (Mac) | Pick a Claude or Codex model with fzf and launch it |
 
 ## Dashboard
 
-Cmd+Shift+B (Alt+Shift+B on Windows) opens a dashboard tab: `shared/worklog-dash` across the top, a broot file tree on the left and Claude in the rest. Cmd+Shift+O re-roots the tree at another repo. The worklog mod, linked to `~/.claude/mods/worklog`, logs commits, PRs, session summaries and, with the Atlassian connector, Jira moves to the same work log and shows today's plan progress in Claude's status line. Both take the log folder, PR sync and ticket-link settings from setup (below), and the picker takes its repo folders from there too. The install scripts link the mod and run `bun install` for the dashboard.
+Cmd+Shift+B (Alt+Shift+B on Windows) opens a tab for the current folder: `shared/worklog-dash` across the top, a broot file tree on the left and Claude in the rest. Cmd+Shift+O points the file tree at another repo from the folders you gave in setup.
 
-## Per-machine setup
+Move between the panes with Cmd+Opt+Arrows (Ctrl+Shift+Arrows on Windows); the focused one is in full color and the rest dim.
 
-Nothing personal or machine-specific is in the repo. On first install the scripts run `shared/setup.ts`, a short set of questions whose answers go to untracked files:
+![Moving focus from Claude to the dashboard, then the file tree, then back](docs/panes.gif)
 
-| File | Holds |
-|---|---|
-| `~/.config/dotfiles/local.json` | Work log folder; PR sync (on by default for your own PRs, optionally a specific gh account, an org and a team); ticket links (a URL with `{id}`, off by default); repo folders for the file-tree picker |
-| `~/.gitconfig.local` | `user.name`, `user.email` |
-| `~/.ssh/config.local` (Windows) | One SSH host; `ssh-config` only includes this file |
+With the dashboard focused, up/down or j/k move, space ticks a checkbox, o opens the row's first link, s syncs PRs, r reloads and q quits.
 
-Rerun it any time with `mac/install.sh --configure`, `bootstrap.ps1 -Configure` or `bun ~/dotfiles/shared/setup.ts`. Enter keeps the current answer and `-` clears it. Anything else machine-specific goes in `~/.gitconfig.local` or, on Mac, `~/.zshrc.local` (sourced last).
+![Moving through the plan and ticking items off in the dashboard](docs/dash.gif)
+
+**The work log** is one markdown file per day, at `<log folder>/YYYY/YYYY-MM/YYYY-MM-DD.md`. The dashboard shows four sections and ignores the rest:
+
+```markdown
+## Plan
+- [ ] Ship search ([ABC-142](https://tracker.example.com/browse/ABC-142))
+	- [x] Index the docs
+- [ ] Review the onboarding copy
+
+## Nice to have
+- [ ] Clean up old feature flags
+
+## Reviews
+## My open PRs
+```
+
+Tab-indented items nest under the one above. A trailing `(...)` of links shows as refs on the right.
+
+**PR sync** fills in Reviews and My open PRs from gh every 5 minutes. By default it shows your own open PRs and review requests from gh's active account. In setup you can turn it off, pin it to one gh account, limit it to an org, and add an org team whose review requests count as yours. A new review request raises a desktop notification.
+
+**The worklog Claude Code mod** (`shared/claude/mods/worklog`, linked to `~/.claude/mods/worklog`) adds events to the log as you work in Claude: commits, opened and merged PRs, a one-line summary of each session, and Jira moves when the Atlassian connector is set up. It also shows today's plan progress in Claude's status line. Events land in `<log folder>/.events/YYYY-MM-DD.jsonl`, and the dashboard lists the latest under Recent.
+
+**Ticket links** are off unless you give a URL with `{id}` in it, such as `https://tracker.example.com/browse/{id}`. With one set, ticket IDs in branch names, commits and PR titles are recorded on events and linked in the dashboard. IDs default to uppercase keys like `ABC-123`; you can give your own regex.
+
+## Repo layout
+
+```
+shared/    every OS: wezterm.lua, gitconfig, git-ignore, ssh-config, setup.ts,
+           claude/statusline.sh, claude/mods/worklog, worklog-dash
+mac/       zshrc, p10k theme, Brewfile, Claude wezterm-flag hook, install.sh
+windows/   PowerShell profile, oh-my-posh theme, winget list, bootstrap.ps1
+```
+
+## License
+
+MIT

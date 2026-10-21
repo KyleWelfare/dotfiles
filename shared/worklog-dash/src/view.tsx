@@ -71,7 +71,7 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
     return (
       <Box flexDirection="column" paddingX={1}>
         <Text bold color={C.accent}>{formatDate(day.date)}</Text>
-        <Text color={C.muted}>No plan yet. Run /plan-day in Claude.</Text>
+        <Text color={C.muted}>No log for today yet: {day.path}</Text>
       </Box>
     )
   }
@@ -230,7 +230,9 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
 
   return (
     <Box flexDirection="column" width={width} height={height} overflow="hidden" paddingX={1}>
-      <Box flexDirection={isWide ? 'row' : 'column'} columnGap={1} flexGrow={1} flexShrink={1} overflow="hidden">
+      {/* flex-start keeps each column at its own height: stretched to the pane, its rows would shrink to
+          nothing and draw over each other instead of being cut off at the bottom. */}
+      <Box flexDirection={isWide ? 'row' : 'column'} alignItems="flex-start" columnGap={1} flexGrow={1} flexShrink={1} overflow="hidden">
         {left}
         {right}
       </Box>

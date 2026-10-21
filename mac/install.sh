@@ -64,7 +64,7 @@ if [ -n "$bun" ]; then
     else echo "note    not a terminal, so setup was skipped; run: bun ~/dotfiles/shared/setup.ts"; fi
   fi
 else
-  echo "note    no bun; install it (brew install oven-sh/bun/bun) and rerun for setup and the dashboard tab"
+  echo "note    no bun; install it (brew install bun) and rerun for setup and the dashboard tab"
 fi
 echo
 echo "Done. Open a new shell and restart WezTerm to pick everything up."
