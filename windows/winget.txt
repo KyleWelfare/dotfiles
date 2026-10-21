@@ -1,0 +1,17 @@
+wez.wezterm
+Microsoft.PowerShell
+Git.Git
+GitHub.GitLFS
+GitHub.cli
+JanDeDobbeleer.OhMyPosh
+junegunn.fzf
+sharkdp.fd
+sharkdp.bat
+BurntSushi.ripgrep.MSVC
+ajeetdsouza.zoxide
+JesseDuffield.lazygit
+zyedidia.micro
+dandavison.delta
+Schniz.fnm
+jqlang.jq
+Dystroy.broot

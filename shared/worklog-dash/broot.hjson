@@ -1,0 +1,7 @@
+// File tree pane of the dashboard layout, loaded with `broot --conf`.
+{
+  // Unity writes a .meta beside every asset; in the tree they double every folder's length.
+  special_paths: {
+    "**/*.meta": "hide"
+  }
+}

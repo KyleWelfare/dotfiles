@@ -1,0 +1,2 @@
+# Hosts are per machine: shared/setup.ts writes them to ~/.ssh/config.local.
+Include config.local

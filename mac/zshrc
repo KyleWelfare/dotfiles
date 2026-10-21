@@ -1,0 +1,126 @@
+# ------------------------------------
+# Personal Zsh configuration (mirror of windows/profile.ps1)
+# Machine-specific aliases, env and secrets go in ~/.zshrc.local (untracked, sourced last).
+# ------------------------------------
+
+# Powerlevel10k instant prompt. Keep at the very top of ~/.zshrc.
+# Nothing sourced below (including ~/.zshrc.local) may print to the console
+# during init, or instant prompt will warn.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+autoload -Uz compinit && compinit
+
+# Editor
+export EDITOR="micro"
+export VISUAL="micro"
+export GIT_EDITOR="micro"
+
+# nvm
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
+
+# AI
+export CLAUDE_CODE_DISABLE_MOUSE=1
+
+# ------------------------------------
+# Aliases
+# ------------------------------------
+alias ll='ls -l'
+alias nini='nvm i && npm i'
+alias latest='git pull && nini'
+alias zshEdit="code ~/.zshrc"
+alias zshSource="source ~/.zshrc"
+alias lg='lazygit'
+alias wtEdit="micro ~/.config/wezterm/wezterm.lua"
+alias ghSwitch="gh auth switch --hostname github.com"
+alias c='claude'
+
+# Git add, commit, and push
+gitcommit() {
+    git add .
+    git commit -m "$*"
+    git push
+}
+alias gc=gitcommit
+
+# ------------------------------------
+# fzf (fd backend: respects .gitignore, includes dotfiles, skips .git)
+# ------------------------------------
+export FZF_DEFAULT_COMMAND='fd --type f --hidden --exclude .git'
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
+export FZF_CTRL_T_OPTS="--preview 'bat --color=always --line-range=:200 {}'"
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+# f: fuzzy open. Pick a file (bat-previewed), open it in micro.
+f() { local file; file=$(fzf --preview 'bat --color=always --line-range=:200 {}') && ${EDITOR:-micro} "$file"; }
+
+# rgf: live content search. Type a regex, results refresh on each keystroke
+# (rg re-runs via change:reload), Enter opens the match in micro.
+rgf() {
+  local rg_cmd="rg --line-number --no-heading --color=always --smart-case"
+  local out file line
+  out=$(FZF_DEFAULT_COMMAND="$rg_cmd -- ${(q)1:-\"\"}" \
+    fzf --ansi --disabled --query "${1:-}" \
+        --bind "change:reload:$rg_cmd -- {q} || true" \
+        --delimiter : \
+        --preview 'bat --color=always --highlight-line {2} {1}' \
+        --preview-window 'up,60%,+{2}/3') || return
+  [ -z "$out" ] && return
+  file=${out%%:*}
+  line=${${out#*:}%%:*}
+  micro +"$line" "$file"
+}
+
+# ai: pick tool + model via fzf, then launch it. Extra args pass through (e.g. `ai "fix the build"`).
+# Columns are tab-separated: "label<TAB>tool<TAB>model-id". fzf shows only the label.
+ai() {
+  local AI_LAUNCH_CHOICES pick tool model
+  AI_LAUNCH_CHOICES='claude · fable\tclaude\tclaude-fable-5
+claude · opus 5\tclaude\tclaude-opus-5
+claude · opus 4.8\tclaude\tclaude-opus-4-8
+claude · sonnet\tclaude\tclaude-sonnet-5
+codex · 5.6 sol\tcodex\tgpt-5.6-sol
+codex · 5.6 luna\tcodex\tgpt-5.6-luna
+codex · 5.6 terra\tcodex\tgpt-5.6-terra'
+  pick=$(printf '%b\n' "$AI_LAUNCH_CHOICES" \
+    | fzf --height=40% --reverse --prompt='launch> ' --with-nth=1 --delimiter='\t') || return
+  tool=$(printf '%s' "$pick" | cut -f2)
+  model=$(printf '%s' "$pick" | cut -f3)
+  case "$tool" in
+    claude) claude --model "$model" "$@" ;;
+    codex)  codex  --model "$model" "$@" ;;
+    *)      echo "ai: unknown tool '$tool'" >&2; return 1 ;;
+  esac
+}
+
+# bun
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# ------------------------------------
+# Keybinds
+# ------------------------------------
+bindkey '^G' set-mark-command
+zle_highlight=(region:bg=blue)
+
+# ------------------------------------
+# PATH
+# ------------------------------------
+export PATH="$HOME/.local/bin:$PATH"        # claude and other user-installed CLIs
+
+# zoxide (smarter cd): `z <partial-dir>` jumps, `zi` opens interactive picker.
+# Must init after compinit.
+eval "$(zoxide init zsh)"
+
+# Powerlevel10k prompt. Run `p10k configure` any time to re-theme.
+source /opt/homebrew/share/powerlevel10k/powerlevel10k.zsh-theme
+[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+source /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+source /opt/homebrew/share/zsh-autosuggestions/zsh-autosuggestions.zsh
+
+[ -f ~/.zshrc.local ] && source ~/.zshrc.local

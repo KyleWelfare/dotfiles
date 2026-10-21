@@ -1,0 +1,6 @@
+{
+  "name": "worklog",
+  "version": "0.2.0",
+  "description": "Automatic work log events for commits, PRs, sessions and (with the Atlassian connector) Jira moves, plus today's plan progress in the status line",
+  "types": "./types/index.d.ts"
+}

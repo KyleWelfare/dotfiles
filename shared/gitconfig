@@ -1,0 +1,41 @@
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[push]
+	autoSetupRemote = true
+[pull]
+	rebase = false
+[core]
+	pager = delta
+[interactive]
+	diffFilter = delta --color-only
+[delta]
+	syntax-theme = Catppuccin Mocha
+	navigate = true
+	line-numbers = true
+	side-by-side = true
+	wrap-max-lines = 2
+	hunk-header-style = omit
+	zero-style = syntax
+	plus-style = syntax "#213d2e"
+	plus-emph-style = syntax bold "#2f5f43"
+	minus-style = syntax "#45212f"
+	minus-emph-style = syntax bold "#6e2d44"
+	line-numbers-plus-style = bold "#a6e3a1"
+	line-numbers-minus-style = bold "#f38ba8"
+	line-numbers-left-style = "#6c7086"
+	line-numbers-right-style = "#6c7086"
+	line-numbers-zero-style = "#6c7086"
+[merge]
+	conflictstyle = zdiff3
+# HTTPS to GitHub authenticates as gh's active account, so ghSwitch also switches git.
+# The empty helper drops the OS default (osxkeychain, Credential Manager) for GitHub only.
+[credential "https://github.com"]
+	helper =
+	helper = !gh auth git-credential
+# Untracked per-machine settings, starting with user.name and user.email (written by
+# shared/setup.ts); must stay last to win.
+[include]
+	path = ~/.gitconfig.local
