@@ -135,13 +135,15 @@ Tab-indented items nest under the one above. A trailing `(...)` of links shows a
 
 **The worklog Claude Code mod** (`shared/claude/mods/worklog`, linked to `~/.claude/mods/worklog`) adds events to the log as you work in Claude: commits, opened and merged PRs, a one-line summary of each session, and Jira moves when the Atlassian connector is set up. It also shows today's plan progress in Claude's status line. Events land in `<log folder>/.events/YYYY-MM-DD.jsonl`, and the dashboard lists the latest under Recent.
 
+**Two Claude skills** go with it, linked into `~/.claude/skills`: `/sessions` reports every live Claude session (state, ticket, context left), and its script also feeds the dashboard's session marks; `/sync-day` does the judgement half of keeping the log current (ticks a ticket or an event settles, Jira moves, flags), while the dashboard's sync does the mechanical half. Both read their per-machine values from `local.json`.
+
 **Ticket links** are off unless you give a URL with `{id}` in it, such as `https://tracker.example.com/browse/{id}`. With one set, ticket IDs in branch names, commits and PR titles are recorded on events and linked in the dashboard. IDs default to uppercase keys like `ABC-123`; you can give your own regex.
 
 ## Repo layout
 
 ```
 shared/    every OS: wezterm.lua, gitconfig, git-ignore, ssh-config, setup.ts,
-           claude/statusline.sh, claude/mods/worklog, worklog-dash
+           claude/statusline.sh, claude/mods/worklog, claude/skills, worklog-dash
 mac/       zshrc, p10k theme, Brewfile, Claude wezterm-flag hook, install.sh
 windows/   PowerShell profile, oh-my-posh theme, winget list, bootstrap.ps1
 ```

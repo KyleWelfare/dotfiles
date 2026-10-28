@@ -70,25 +70,26 @@ Install-Config 'windows\profile.ps1'                    $PROFILE
 Install-Config 'windows\powerlevel10k_classic.omp.json' "$HOME\.config\oh-my-posh\powerlevel10k_classic.omp.json"
 Install-Config 'shared\claude\statusline.sh'            "$HOME\.claude\statusline.sh"
 
-# A junction needs neither Developer Mode nor admin, so the mod folder is always linked.
-$modSource = Join-Path $repo 'shared\claude\mods\worklog'
-$modTarget = "$HOME\.claude\mods\worklog"
-$existing = Get-Item $modTarget -Force -EA SilentlyContinue
-if ($existing -and $existing.LinkTarget -eq $modSource) {
-    Write-Host "linked  $modTarget"
-} else {
+# A junction needs neither Developer Mode nor admin, so the mod and skill folders are always linked.
+function Install-Folder($relative, $target) {
+    $source = Join-Path $repo $relative
+    $existing = Get-Item $target -Force -EA SilentlyContinue
+    if ($existing -and $existing.LinkTarget -eq $source) { Write-Host "linked  $target"; return }
     if ($existing) {
-        $backup = "$modTarget.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
-        Move-Item $modTarget $backup
+        $backup = "$target.bak-$(Get-Date -Format yyyyMMdd-HHmmss)"
+        Move-Item $target $backup
         Write-Host "backup  $backup"
     }
-    New-Item -ItemType Directory -Force (Split-Path $modTarget) | Out-Null
-    New-Item -ItemType Junction -Path $modTarget -Target $modSource | Out-Null
-    Write-Host "link    $modTarget"
+    New-Item -ItemType Directory -Force (Split-Path $target) | Out-Null
+    New-Item -ItemType Junction -Path $target -Target $source | Out-Null
+    Write-Host "link    $target"
 }
+Install-Folder 'shared\claude\mods\worklog'     "$HOME\.claude\mods\worklog"
+Install-Folder 'shared\claude\skills\sessions'  "$HOME\.claude\skills\sessions"
+Install-Folder 'shared\claude\skills\sync-day'  "$HOME\.claude\skills\sync-day"
 
 # worklog-dash (the Alt+Shift+B dashboard tab) runs from this repo, and setup.ts asks for the
-# per-machine values the repo leaves out: git identity, work log, PR sync, repo folders, SSH host.
+# per-machine values the repo leaves out: git identity, work log, PR sync, SSH host.
 if (Get-Command bun -EA SilentlyContinue) {
     Push-Location (Join-Path $repo 'shared\worklog-dash')
     bun install --silent

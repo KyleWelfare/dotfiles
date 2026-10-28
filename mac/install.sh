@@ -28,6 +28,8 @@ link mac/zshrc                        ~/.zshrc
 link mac/p10k.zsh                     ~/.p10k.zsh
 link mac/claude/hooks/wezterm-flag.sh ~/.claude/hooks/wezterm-flag.sh
 link shared/claude/mods/worklog       ~/.claude/mods/worklog
+link shared/claude/skills/sessions    ~/.claude/skills/sessions
+link shared/claude/skills/sync-day    ~/.claude/skills/sync-day
 
 # settings.json also holds per-machine state (plugins, other hooks, permissions),
 # so merge in statusLine and the wezterm-flag hooks rather than linking the whole
@@ -54,7 +56,7 @@ if [ "$merged" != "$(jq . "$settings")" ]; then
 fi
 
 # worklog-dash (the Cmd+Shift+B dashboard tab) runs from this repo, and setup.ts asks for the
-# per-machine values the repo leaves out: git identity, work log, PR sync, repo folders.
+# per-machine values the repo leaves out: git identity, work log, PR sync, review bot.
 bun="$(command -v bun || { [ -x ~/.bun/bin/bun ] && echo ~/.bun/bin/bun; } || true)"
 if [ -n "$bun" ]; then
   (cd "$repo/shared/worklog-dash" && "$bun" install --silent)
