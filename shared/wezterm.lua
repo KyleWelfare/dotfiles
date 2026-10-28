@@ -317,7 +317,8 @@ local function open_dashboard(win, pane)
     args = { is_windows and "broot.exe" or "/opt/homebrew/bin/broot", "--conf", DASH .. "/broot.hjson", cwd },
   }
   main:activate()
-  main:send_text("claude\r")
+  -- The first prompt starts the worklog/Jira sync loop.
+  main:send_text('claude "/loop 10m /sync-day"\r')
 end
 
 -- Per-machine settings from shared/setup.ts. Read when used, so a rerun applies without a reload.
