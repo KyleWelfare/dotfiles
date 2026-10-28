@@ -1,5 +1,5 @@
 // Asks for the per-machine values this repo keeps out of git and writes them to untracked files:
-// ~/.config/dotfiles/local.json (work log, PR sync, repo folders), ~/.gitconfig.local (git identity)
+// ~/.config/dotfiles/local.json (work log, PR sync, review bot), ~/.gitconfig.local (git identity)
 // and, on Windows, ~/.ssh/config.local (an SSH host). The install scripts run it on first install
 // and with --configure (Mac) or -Configure (Windows); `bun ~/dotfiles/shared/setup.ts` runs it directly.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -13,7 +13,6 @@ type Local = {
     tickets?: { url?: string; pattern?: string }
     reviewBot?: { enabled?: boolean; tokenFile?: string; [key: string]: unknown }
   }
-  repoGlobs?: string[]
   [key: string]: unknown
 }
 
@@ -86,9 +85,6 @@ const reviewToken = reviewsOn
   ? ask('File holding a read-only GitHub token for the reviews (blank: the PR sync account)', reviewBot.tokenFile ?? '')
   : (reviewBot.tokenFile ?? '')
 
-console.log('\nDashboard file tree')
-const globs = ask('Repo folders for the picker, comma separated, * allowed (such as ~/code/*)', (local.repoGlobs ?? []).join(', '))
-
 let ssh = readSshHost()
 if (isWindows) {
   console.log('\nSSH host (~/.ssh/config.local)')
@@ -107,10 +103,6 @@ const next: Local = {
     // Spread so hand-set options (maxParallel, timeoutMinutes, model, sparseExclude) survive a rerun.
     reviewBot: { ...reviewBot, enabled: reviewsOn, tokenFile: reviewToken },
   },
-  repoGlobs: globs
-    .split(',')
-    .map(glob => glob.trim())
-    .filter(Boolean),
 }
 mkdirSync(dirname(localPath), { recursive: true })
 writeFileSync(localPath, `${JSON.stringify(next, null, 2)}\n`)

@@ -1,10 +1,11 @@
 import { Box, Text } from 'ink'
 
-import type { PlanItem } from '@worklog-types'
+import type { LogEvent, PlanItem } from '@worklog-types'
 import { splitPr, splitRefs, ticketFrom, ticketUrl } from '@worklog/parse.ts'
 
 import { CONFIG, type Day } from './log.ts'
 import { REVIEW_BOT, type ReviewEntry, type ReviewerState, isStale, resumeUrl } from './reviews.ts'
+import type { LiveSession, SessionState } from './sessions.ts'
 
 // Catppuccin Mocha, to match the WezTerm theme.
 const C = {
@@ -57,7 +58,6 @@ const link = (label: string, href: string | undefined) => (href ? `\u001b]8;;${h
 
 // Side by side from here, each column wide enough that refs stay beside their titles.
 const WIDE_FROM = 120
-const RECENT_COUNT = 5
 
 /** Dots filling the gap between a title and its refs; basis 0 so it only takes space the title leaves. */
 const Leader = () => (
@@ -81,6 +81,37 @@ const REVIEWER_MARKS: Record<ReviewerState, { glyph: string; color: string }> = 
   commented: { glyph: '◌', color: C.muted },
 }
 const MAX_REVIEWERS = 3
+
+const SESSION_MARKS: Record<SessionState, { glyph: string; color: string }> = {
+  busy: { glyph: '◐', color: C.yellow },
+  waiting: { glyph: '●', color: C.peach },
+  idle: { glyph: '○', color: C.muted },
+}
+
+/** A session's state and context left, linked so a click switches to its tab (wezterm.lua's open-uri handler). */
+export function SessionMark({ session }: { session: LiveSession }) {
+  const mark = SESSION_MARKS[session.state]
+  const href = session.paneId === null ? undefined : `prsession://activate?pane=${session.paneId}`
+  const label = `${mark.glyph}${session.leftPct === null ? '' : ` ${session.leftPct}%`}`
+  return <Text color={mark.color}>{link(label, href)}</Text>
+}
+
+/** The latest log events, newest first. */
+export function Recent({ events, count }: { events: LogEvent[]; count: number }) {
+  return events
+    .slice(-count)
+    .reverse()
+    .map((event, index) => {
+      const icon = EVENT_ICONS[event.kind] ?? { glyph: '•', color: C.muted }
+      const ticket = CONFIG.tickets && event.ticket ? link(event.ticket, ticketUrl(CONFIG.tickets, event.ticket)) : null
+      return (
+        <Text key={`event-${index}`} color={C.text} wrap="truncate-end">
+          <Text color={C.muted}>{event.ts.slice(11, 16)}</Text> <Text color={icon.color}>{icon.glyph}</Text> {event.text}
+          {ticket && <Text color={C.muted}> · {ticket}</Text>}
+        </Text>
+      )
+    })
+}
 
 /** Plan text with inline code shown without its backticks, in its own color, and **bold** as bold. */
 function Inline({ text, isMuted }: { text: string; isMuted: boolean }) {
@@ -133,9 +164,11 @@ type Props = {
   sync: SyncState
   reviews: Record<string, ReviewEntry>
   autoReview: boolean
+  /** The live sessions working on each plan item, keyed by its line. */
+  sessions: Map<number, LiveSession[]>
 }
 
-export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoReview }: Props) {
+export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoReview, sessions }: Props) {
   if (!day.hasFile) {
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -154,7 +187,6 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
   const barWidth = Math.max(10, Math.min(40, columnWidth - 30))
   const filled = top.length === 0 ? 0 : Math.round((done / top.length) * barWidth)
   const secondary = ['Reviews', 'My open PRs'].filter(section => day.items.some(item => item.section === section))
-  const recent = day.events.slice(-RECENT_COUNT).reverse()
 
   const mark = (item: PlanItem) => (
     <Text color={item.isDone ? C.green : C.muted} backgroundColor={item.line === cursorLine ? C.cursor : undefined}>
@@ -167,6 +199,7 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
     const next = list[index + 1]
     const branch = item.depth === 0 ? '' : next !== undefined && next.depth >= item.depth ? '├─ ' : '└─ '
     const isCursor = item.line === cursorLine
+    const working = sessions.get(item.line) ?? []
     return (
       <Box key={`row-${item.line}`} columnGap={1}>
         <Box flexShrink={1}>
@@ -187,7 +220,14 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
             </Text>
           </Text>
         </Box>
-        {refs !== '' && <Leader />}
+        {(refs !== '' || working.length > 0) && <Leader />}
+        {working.length > 0 && (
+          <Box flexShrink={0} columnGap={1}>
+            {working.map(session => (
+              <SessionMark key={session.pid} session={session} />
+            ))}
+          </Box>
+        )}
         {refs !== '' && (
           <Box flexShrink={0}>
             <Text color={C.muted}>
@@ -307,24 +347,6 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
           {day.items.filter(item => item.section === section).map(prRow)}
         </Box>
       ))}
-      {recent.length > 0 && (
-        <Box flexDirection="column" marginTop={secondary.length === 0 && isWide ? 0 : 1}>
-          <Text bold color={C.text}>
-            Recent
-          </Text>
-          {recent.map((event, index) => {
-            const icon = EVENT_ICONS[event.kind] ?? { glyph: '•', color: C.muted }
-            const ticket = CONFIG.tickets && event.ticket ? link(event.ticket, ticketUrl(CONFIG.tickets, event.ticket)) : null
-            return (
-              <Text key={`event-${index}`} color={C.text} wrap="truncate-end">
-                <Text color={C.muted}>{event.ts.slice(11, 16)}</Text> <Text color={icon.color}>{icon.glyph}</Text>{' '}
-                {event.text}
-                {ticket && <Text color={C.muted}> · {ticket}</Text>}
-              </Text>
-            )
-          })}
-        </Box>
-      )}
     </Box>
   )
 

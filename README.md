@@ -8,7 +8,7 @@ Only the focused pane (Claude, here) is in full color; the rest dim, so you can 
 
 - **One WezTerm config for both OSes.** Keys sit in the same physical spot on each keyboard (Mac Cmd is Windows Alt), and the layout is saved and restored across restarts.
 - **Claude Code in the terminal.** Open a tab running Claude in the current folder with one key. On Mac, background tabs show when Claude is working and when it needs you, and Claude's status line shows the folder, branch, model, context left and today's plan progress.
-- **A dashboard tab.** Today's plan, your open PRs and review requests, and recent work-log events sit above a file tree and a Claude session, all rooted at the current repo.
+- **A dashboard tab.** Today's plan, your open PRs and review requests, and recent work-log events sit above a Claude session rooted at the current repo, beside your other Claude sessions.
 - **Shell helpers.** A p10k prompt (oh-my-posh on Windows), fuzzy file open and live content search, zoxide, lazygit, delta diffs, and git's GitHub login following gh's active account.
 
 Configs are symlinked into place, so editing one on any machine edits the repo. Fork it first if you want to keep your own changes.
@@ -45,7 +45,7 @@ The first install asks a few questions, so nothing personal or machine-specific 
 
 | File | Holds |
 |---|---|
-| `~/.config/dotfiles/local.json` | Work log folder, PR sync, ticket links, and the repo folders the dashboard's file tree can jump to |
+| `~/.config/dotfiles/local.json` | Work log folder, PR sync, ticket links and the review bot |
 | `~/.gitconfig.local` | Git `user.name` and `user.email` |
 | `~/.ssh/config.local` (Windows) | One SSH host |
 
@@ -71,7 +71,6 @@ Anything else machine-specific goes in `~/.gitconfig.local` or, on Mac, `~/.zshr
 | New tab running Claude here | Cmd+Shift+T | Alt+Shift+T |
 | Start Claude in this pane | Cmd+Shift+C | Alt+Shift+C |
 | Dashboard tab | Cmd+Shift+B | Alt+Shift+B |
-| Point the dashboard's file tree at another repo | Cmd+Shift+O | Alt+Shift+O |
 | Command palette | Cmd+Shift+P | Alt+Shift+P |
 | Workspace switcher (Windows: also shells) | Cmd+Shift+S | Alt+Shift+S |
 | Save session / restore a saved one | Cmd+Ctrl+S / Cmd+Ctrl+R | Alt+Ctrl+S / Alt+Ctrl+R |
@@ -105,7 +104,7 @@ A background tab running Claude shows a moving wave while it works and a red dot
 
 ## Dashboard
 
-Cmd+Shift+B (Alt+Shift+B on Windows) opens a tab for the current folder: `shared/worklog-dash` across the top, a broot file tree on the left and Claude in the rest. Cmd+Shift+O points the file tree at another repo from the folders you gave in setup.
+Cmd+Shift+B (Alt+Shift+B on Windows) opens a tab for the current folder: `shared/worklog-dash` across the top, the Claude sessions that match no plan item and the recent log events on the left, and Claude in the rest.
 
 Move between the panes with Cmd+Opt+Arrows (Ctrl+Shift+Arrows on Windows); the focused one is in full color and the rest dim.
 

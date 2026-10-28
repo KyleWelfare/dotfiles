@@ -1,15 +1,19 @@
 # worklog-dash
 
-Today's work log as a terminal pane: the plan, review requests, your open PRs and recent log events. The dotfiles' dashboard tab (Cmd+Shift+B, Alt+Shift+B on Windows) runs it in its top split. The repo README describes the log format.
+Today's work log as a terminal pane: the plan, review requests and your open PRs. The dotfiles' dashboard tab (Cmd+Shift+B, Alt+Shift+B on Windows) runs it in its top split, and `--side` in its left one: the Claude sessions that match no plan item, then the recent log events. The repo README describes the log format.
 
 - `bun index.tsx`: run it.
-- `bun index.tsx --once [columns]`: print one frame and exit, for checking the layout without a TTY.
+- `bun index.tsx --once [columns]`: print one frame and exit, for checking the layout without a TTY (add `--side` for the left pane).
 
 Keys: up/down or j/k move, space or x toggles a checkbox, o opens the row's first link (a reviewed PR's session instead, with the review bot on), v reviews the selected review request now, a switches reviews between auto and manual, s syncs PRs now, r reloads, q quits. Clicking a ticket or PR link opens it.
 
 It reads the same markdown and `.events` files as the worklog Claude Code mod (`../claude/mods/worklog`) and reuses its `parse.ts`. Both take their settings from `~/.config/dotfiles/local.json`, which `../setup.ts` writes; the dashboard reads it at start, so restart it after changing them.
 
 PRs sync from gh every 5 minutes, rewriting the log's Reviews and My open PRs sections. A review request the log doesn't list yet raises a desktop notification (a WezTerm toast on Windows) and a `review` event. With a gh account set, every search uses that account's token, and without a login for it the sections are left alone rather than emptied.
+
+## Sessions
+
+Each plan row shows the live Claude sessions working on it: `◐` busy, `●` waiting on you (a permission prompt, or its last reply asks something), `○` idle, with the context left. Clicking one switches to its tab. A session belongs to the row whose ticket and PRs come up most in its last 20 prompts and replies, at least twice; a sub-row takes it when it has most of those mentions, otherwise the parent does. Sessions that match no row are listed in the left pane, where up/down and `o` switch to one. The data comes from the `/sessions` skill's script (`~/.claude/skills/sessions/scripts/sessions.py --json`) and `wezterm cli list`.
 
 ## Review bot (Mac)
 

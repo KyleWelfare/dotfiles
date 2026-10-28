@@ -14,4 +14,3 @@ zyedidia.micro
 dandavison.delta
 Schniz.fnm
 jqlang.jq
-Dystroy.broot

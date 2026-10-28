@@ -298,24 +298,25 @@ local function pane_cwd(pane)
   return is_windows and cwd:gsub("^/(%a:)", "%1") or cwd
 end
 
--- Dashboard tab: today's work log across the top, a file tree on the left and Claude in the
--- rest, all rooted at the current pane's directory. Runs the worklog-dash app from this repo.
+-- Dashboard tab: today's work log across the top, other Claude sessions and recent log events on
+-- the left, and Claude in the rest, rooted at the current pane's directory. Runs the worklog-dash
+-- app from this repo, once for the top and once with --side for the left.
 local DASH = wezterm.home_dir .. "/dotfiles/shared/worklog-dash"
+-- The pane stays open showing why if the app exits.
+local function dash_args(flags)
+  if is_windows then
+    return { "pwsh.exe", "-NoLogo", "-NoProfile", "-Command",
+             "Set-Location '" .. DASH .. "'; bun index.tsx " .. flags .. "; Read-Host \"worklog-dash exited ($LASTEXITCODE), Enter closes\"" }
+  end
+  -- A login shell for PATH (gh); it cds itself because the split's cwd doesn't reach it.
+  return { "/bin/zsh", "-lc", "cd " .. DASH .. " && ~/.bun/bin/bun index.tsx " .. flags .. "; echo \"worklog-dash exited ($?), Enter closes\"; read" }
+end
 local function open_dashboard(win, pane)
   local cwd = pane_cwd(pane)
   local tab, main = win:mux_window():spawn_tab { cwd = cwd }
   tab:set_title("dash: " .. (cwd:match("([^/\\]+)[/\\]?$") or cwd))
-  -- The pane stays open showing why if the app exits.
-  local dash_args = is_windows
-    and { "pwsh.exe", "-NoLogo", "-NoProfile", "-Command",
-          "Set-Location '" .. DASH .. "'; bun index.tsx; Read-Host \"worklog-dash exited ($LASTEXITCODE), Enter closes\"" }
-    -- A login shell for PATH (gh); it cds itself because the split's cwd doesn't reach it.
-    or { "/bin/zsh", "-lc", "cd " .. DASH .. " && ~/.bun/bin/bun index.tsx; echo \"worklog-dash exited ($?), Enter closes\"; read" }
-  main:split { direction = "Top", size = 0.28, top_level = true, cwd = DASH, args = dash_args }
-  main:split {
-    direction = "Left", size = 0.22, cwd = cwd,
-    args = { is_windows and "broot.exe" or "/opt/homebrew/bin/broot", "--conf", DASH .. "/broot.hjson", cwd },
-  }
+  main:split { direction = "Top", size = 0.28, top_level = true, cwd = DASH, args = dash_args("") }
+  main:split { direction = "Left", size = 0.22, cwd = DASH, args = dash_args("--side") }
   main:activate()
   -- The first prompt starts the worklog/Jira sync loop.
   main:send_text('claude "/loop 10m /sync-day"\r')
@@ -335,6 +336,17 @@ end
 -- folder get through, since the link ends up in a shell command.
 local REVIEW_WORKTREES = wezterm.home_dir .. "/.cache/worklog-dash/wt/"
 wezterm.on("open-uri", function(window, pane, uri)
+  -- A session mark in the dashboard (prsession://activate?pane=N): switch to that session's tab and pane.
+  local pane_id = uri:match("^prsession://activate%?pane=(%d+)$")
+  if pane_id then
+    local target = wezterm.mux.get_pane(tonumber(pane_id))
+    if target then
+      target:tab():activate()
+      target:activate()
+    end
+    return false
+  end
+  if uri:match("^prsession:") then return false end
   local session, cwd, title = uri:match("^prreview://resume%?session=([^&]+)&cwd=([^&]+)&title=([^&]*)$")
   if not session then
     if uri:match("^prreview:") then return false end
@@ -351,53 +363,6 @@ wezterm.on("open-uri", function(window, pane, uri)
   tab:set_title("review: " .. title)
   return false
 end)
-
--- Repo picker for the dashboard's file tree: re-roots the tab's broot pane at the chosen repo
--- or worktree, so one dash tab covers every repo. The folders are local.json's repoGlobs.
-local function repo_choices()
-  local home = wezterm.home_dir
-  local choices = {}
-  for _, glob in ipairs(local_settings().repoGlobs or {}) do
-    local pattern = (glob:sub(1, 1) == "~" and home .. glob:sub(2) or glob) .. "/.git"
-    for _, git in ipairs(wezterm.glob(pattern)) do
-      local repo = git:gsub("[/\\]%.git$", "")
-      local label = repo:sub(1, #home) == home and "~" .. repo:sub(#home + 1) or repo
-      table.insert(choices, { id = repo, label = label })
-    end
-  end
-  table.sort(choices, function(a, b) return a.label:lower() < b.label:lower() end)
-  return choices
-end
-local function tree_pane(tab)
-  for _, p in ipairs(tab:panes()) do
-    local name = p:get_foreground_process_name() or ""
-    if name:match("broot$") or name:match("broot%.exe$") then return p end
-  end
-end
-local function pick_tree_repo(win, pane)
-  local tree = tree_pane(pane:tab())
-  if not tree then
-    win:toast_notification("wezterm", "no broot file tree in this tab", nil, 2000)
-    return
-  end
-  local choices = repo_choices()
-  if #choices == 0 then
-    win:toast_notification("wezterm", "no repos: set repo folders with bun ~/dotfiles/shared/setup.ts", nil, 4000)
-    return
-  end
-  win:perform_action(act.InputSelector {
-    title = "File tree repo",
-    fuzzy = true,
-    choices = choices,
-    action = wezterm.action_callback(function(_, _, id)
-      if not id then return end
-      -- Esc clears a half-typed filter; sent with the command, broot reads it all as a filter.
-      tree:send_text("\x1b")
-      wezterm.sleep_ms(200)
-      tree:send_text(":focus " .. id .. "/\r")
-    end),
-  }, pane)
-end
 
 -- Keybinds. The Keybinds table in README.md lists these; keep it in step.
 config.keys = {
@@ -467,7 +432,6 @@ config.keys = {
   { key = "c", mods = MOD .. "|SHIFT", action = act.SendString "claude\r" },
 
   -- Re-root the dashboard's file tree at another repo
-  { key = "o", mods = MOD .. "|SHIFT", action = wezterm.action_callback(pick_tree_repo) },
 
   -- Command palette + workspace switcher (the "tmux sessions" replacement)
   { key = "p", mods = MOD .. "|SHIFT", action = act.ActivateCommandPalette },

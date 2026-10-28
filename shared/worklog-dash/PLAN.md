@@ -31,7 +31,7 @@ Plan from the 2026-10-28 dashboard review. Three steps, in order; steps 2 and 3 
 My Open PRs stays as it is otherwise. Its job is also to remind you of older unresolved PRs that aren't on the day's
 plan, so it doesn't drop the PRs the plan links.
 
-## Step 2 - sessions beside plan items, and a new left pane
+## Step 2 - sessions beside plan items, and a new left pane - done 2026-10-28
 
 **Session markers on plan rows.** Each plan row whose ticket or PR a live Claude session is working on gets a marker:
 busy, waiting on you, or idle, plus context left (for example `◐ busy · 64%`, `● waiting`).

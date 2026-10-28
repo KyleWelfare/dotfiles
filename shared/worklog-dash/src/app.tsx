@@ -20,6 +20,7 @@ import {
   setAutoReview,
   tickReviews,
 } from './reviews.ts'
+import { type LiveSession, loadSessions, matchSessions } from './sessions.ts'
 import { syncPrs } from './sync.ts'
 import { Dashboard, type SyncState, selectable } from './view.tsx'
 
@@ -35,12 +36,14 @@ export function App() {
   const [day, setDay] = useState<Day | null>(null)
   const [reviews, setReviews] = useState<Record<string, ReviewEntry>>({})
   const [autoReview, setAutoReviewState] = useState(true)
+  const [live, setLive] = useState<LiveSession[]>([])
   const [cursor, setCursor] = useState(0)
   const [sync, setSync] = useState<SyncState>({ isOff: CONFIG.github === null, isRunning: false, lastAt: null, error: null })
   const isSyncing = useRef(false)
 
   const reload = useCallback(async () => {
     setDay(await loadDay())
+    void loadSessions().then(setLive)
     if (REVIEW_BOT !== null) {
       setReviews(await loadReviews())
       setAutoReviewState(await isAutoReview())
@@ -126,5 +129,6 @@ export function App() {
   })
 
   if (day === null) return null
-  return <Dashboard day={day} width={columns} height={rows} cursorLine={selected?.line ?? null} sync={sync} reviews={reviews} autoReview={autoReview} />
+  const { byLine } = matchSessions(day.items, live)
+  return <Dashboard day={day} width={columns} height={rows} cursorLine={selected?.line ?? null} sync={sync} reviews={reviews} autoReview={autoReview} sessions={byLine} />
 }

@@ -23,4 +23,3 @@ brew "micro"
 # Git and files
 brew "lazygit"
 brew "git-delta"
-brew "broot"
