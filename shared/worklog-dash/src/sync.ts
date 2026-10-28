@@ -9,8 +9,7 @@ import { appendEvent } from './log.ts'
 const PR_WINDOW_DAYS = 30
 const FAILING_CHECKS = new Set(['FAILURE', 'ERROR', 'TIMED_OUT'])
 
-type ReviewPr = SearchedPr & { author: { login: string } }
-type TeamReviewPr = ReviewPr & { isDraft: boolean }
+type ReviewPr = SearchedPr & { author: { login: string }; isDraft: boolean }
 type MyPr = SearchedPr & { isDraft: boolean; repository: { name: string; nameWithOwner: string } }
 type CheckRun = { conclusion?: string | null; state?: string | null }
 type GhResult<T> = { value: T } | { error: string }
@@ -53,15 +52,16 @@ async function ghJson<T>(args: string[], env: Record<string, string>): Promise<G
 }
 
 /**
- * Direct requests plus the team's, deduped by URL, minus team drafts and my own PRs. Fails if either
+ * Direct requests plus the team's, deduped by URL, minus drafts and my own PRs. Fails if either
  * search does: rewriting Reviews from half the results would drop rows and re-notify them on the next sync.
  */
-function mergeRequests(direct: GhResult<ReviewPr[]>, team: GhResult<TeamReviewPr[]>, user: string): GhResult<ReviewPr[]> {
+function mergeRequests(direct: GhResult<ReviewPr[]>, team: GhResult<ReviewPr[]>, user: string): GhResult<ReviewPr[]> {
   if ('error' in direct) return direct
   if ('error' in team) return team
-  const seen = new Set(direct.value.map(pr => pr.url))
+  const fromDirect = direct.value.filter(pr => !pr.isDraft)
+  const seen = new Set(fromDirect.map(pr => pr.url))
   const fromTeam = team.value.filter(pr => !pr.isDraft && pr.author.login !== user && !seen.has(pr.url))
-  return { value: [...direct.value, ...fromTeam] }
+  return { value: [...fromDirect, ...fromTeam] }
 }
 
 async function myPrRow(pr: MyPr, env: Record<string, string>): Promise<string> {
@@ -106,13 +106,13 @@ export async function syncPrs(path: string, date: string, github: GithubConfig, 
   const search = ['search', 'prs', '--state', 'open', ...owner, '--updated', `>=${since}`, '--json']
   const teamSearch =
     github.org && github.team
-      ? ghJson<TeamReviewPr[]>([...search, 'number,title,url,author,repository,isDraft', `team-review-requested:${github.org}/${github.team}`], env)
+      ? ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft', `team-review-requested:${github.org}/${github.team}`], env)
       : Promise.resolve({ value: [] })
   // Only the team search can return your own PRs, so the login is looked up only for it.
   const login = github.user ?? (github.team ? ((await ghText(['api', 'user', '--jq', '.login'], env)) ?? '') : '')
 
   const [direct, team, mine] = await Promise.all([
-    ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository', '--review-requested', '@me'], env),
+    ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft', '--review-requested', '@me'], env),
     teamSearch,
     ghJson<MyPr[]>([...search, 'number,title,url,repository,isDraft', '--author', '@me'], env),
   ])
