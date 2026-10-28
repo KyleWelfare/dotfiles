@@ -13,7 +13,7 @@ PRs sync from gh every 5 minutes, rewriting the log's Reviews and My open PRs se
 
 ## Sessions
 
-Each plan row shows the live Claude sessions working on it: `◐` busy, `●` waiting on you (a permission prompt, or its last reply asks something), `○` idle, with the context left. Clicking one switches to its tab. A session belongs to the row whose ticket and PRs come up most in its last 20 prompts and replies, at least twice; a sub-row takes it when it has most of those mentions, otherwise the parent does. Sessions that match no row are listed in the left pane, where up/down and `o` switch to one. The data comes from the `/sessions` skill's script (`~/.claude/skills/sessions/scripts/sessions.py --json`) and `wezterm cli list`.
+Each plan row shows the live Claude sessions working on it: `◐` busy, `●` waiting on you (a permission prompt, or its last reply asks something), `○` idle, with the context left. Clicking one switches to its tab. A session belongs to the item whose ticket and PRs come up most in its last 20 prompts and replies, once one of its rows comes up in at least three of them; a sub-row takes it when it has most of those mentions, otherwise the parent does. Sessions that match no row are listed in the left pane, where up/down and `o` switch to one. The data comes from the `/sessions` skill's script (`~/.claude/skills/sessions/scripts/sessions.py --json`) and `wezterm cli list`.
 
 ## Review bot (Mac)
 

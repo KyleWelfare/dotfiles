@@ -15,7 +15,7 @@ type Props = { day: Day; other: LiveSession[]; width: number; height: number; cu
 
 /**
  * The dashboard's left pane: live sessions that match no plan item on top (the ones that do are marked on the plan
- * itself), and the latest log events below, each in half the height.
+ * itself), the latest log events below, each in about half the height, and the keys on the last line.
  */
 export function Side({ day, other, width, height, cursor }: Props) {
   const half = Math.max(3, Math.floor(height / 2))
@@ -36,7 +36,12 @@ export function Side({ day, other, width, height, cursor }: Props) {
         <Text bold color={C.text}>
           Recent
         </Text>
-        <Recent events={day.events} count={Math.max(1, height - half - 1)} />
+        <Recent events={day.events} count={Math.max(1, height - half - 3)} />
+      </Box>
+      <Box marginTop={1}>
+        <Text color={C.muted} wrap="truncate-end">
+          ↑↓ move · o switch · r reload · q quit
+        </Text>
       </Box>
     </Box>
   )

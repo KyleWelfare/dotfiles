@@ -40,8 +40,13 @@ describe('matchSessions', () => {
     expect(byLine.get(3)?.map(s => s.pid)).toEqual([1])
   })
 
-  test('one passing mention leaves a session unmatched', () => {
-    const { byLine, other } = matchSessions(plan, [session(1, { 'IS-2538': 1, 'minigames#9999': 6 })])
+  test('passing mentions spread over an item leave a session unmatched', () => {
+    const { other } = matchSessions(plan, [session(1, { 'IS-2804': 1, 'minigames#2309': 2 })])
+    expect(other.map(s => s.pid)).toEqual([1])
+  })
+
+  test('a couple of passing mentions leave a session unmatched', () => {
+    const { byLine, other } = matchSessions(plan, [session(1, { 'IS-2538': 2, 'minigames#9999': 6 })])
     expect(byLine.size).toBe(0)
     expect(other.map(s => s.pid)).toEqual([1])
   })

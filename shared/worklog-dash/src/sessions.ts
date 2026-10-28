@@ -8,9 +8,9 @@ import { run } from './sync.ts'
 const SESSIONS_SCRIPT = join(homedir(), '.claude/skills/sessions/scripts/sessions.py')
 const WEZTERM = '/Applications/WezTerm.app/Contents/MacOS/wezterm'
 
-// A session belongs to a plan item only when that item's ticket and PRs come up in at least this many of its recent
-// prompts and replies; one passing mention (a review, a status report) shouldn't move it onto the plan.
-const MIN_TEXTS = 2
+// A session belongs to a plan item only when one of its rows' ticket or PRs comes up in at least this many of its
+// recent prompts and replies; a few passing mentions (a review, a status report) shouldn't move it onto the plan.
+const MIN_TEXTS = 3
 // Within an item, a sub-item takes the session when it has this share of the item's mentions; otherwise the parent.
 const CHILD_SHARE = 0.6
 
@@ -113,7 +113,8 @@ export function matchSessions(
     for (const group of groups) {
       const rows = group.map(row => ({ item: row.item, score: score(row.labels) }))
       const total = rows.reduce((sum, row) => sum + row.score, 0)
-      if (total >= MIN_TEXTS && (best === null || total > best.total)) best = { rows, total }
+      const strongest = Math.max(...rows.map(row => row.score))
+      if (strongest >= MIN_TEXTS && (best === null || total > best.total)) best = { rows, total }
     }
     if (best === null) {
       other.push(session)
