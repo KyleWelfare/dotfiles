@@ -57,7 +57,16 @@ const link = (label: string, href: string | undefined) => (href ? `\u001b]8;;${h
 const WIDE_FROM = 120
 const RECENT_COUNT = 5
 
-export type SyncState = { isOff: boolean; isRunning: boolean; lastAt: string | null; error: string | null }
+/** Dots filling the gap between a title and its refs; basis 0 so it only takes space the title leaves. */
+const Leader = () => (
+  <Box flexGrow={1} flexBasis={0} height={1} overflow="hidden">
+    <Text color={C.cursor} wrap="hard">
+      {'·'.repeat(300)}
+    </Text>
+  </Box>
+)
+
+export type SyncState ={ isOff: boolean; isRunning: boolean; lastAt: string | null; error: string | null }
 
 /** The rows the cursor walks: every checkbox in Plan, Nice to have and Reviews, in file order. */
 export function selectable(day: Day): PlanItem[] {
@@ -99,7 +108,7 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
     const branch = item.depth === 0 ? '' : next !== undefined && next.depth >= item.depth ? '├─ ' : '└─ '
     const isCursor = item.line === cursorLine
     return (
-      <Box key={`row-${item.line}`} justifyContent="space-between" columnGap={2}>
+      <Box key={`row-${item.line}`} columnGap={1}>
         <Box flexShrink={1}>
           <Text wrap="truncate-end">
             <Text color={C.muted}>
@@ -118,6 +127,7 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
             </Text>
           </Text>
         </Box>
+        {refs !== '' && <Leader />}
         {refs !== '' && (
           <Box flexShrink={0}>
             <Text color={C.muted}>
