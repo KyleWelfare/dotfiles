@@ -85,14 +85,17 @@ const MAX_REVIEWERS = 3
 const SESSION_MARKS: Record<SessionState, { glyph: string; color: string }> = {
   busy: { glyph: '◐', color: C.yellow },
   waiting: { glyph: '●', color: C.peach },
-  idle: { glyph: '○', color: C.muted },
+  idle: { glyph: '○', color: C.blue },
 }
 
-/** A session's state and context left, linked so a click switches to its tab (wezterm.lua's open-uri handler). */
+/**
+ * A session's state spelled out with its context left (`◐ busy 59%`), in full color so it stands apart from the gray
+ * refs, and linked so a click switches to its tab (wezterm.lua's open-uri handler).
+ */
 export function SessionMark({ session }: { session: LiveSession }) {
   const mark = SESSION_MARKS[session.state]
   const href = session.paneId === null ? undefined : `prsession://activate?pane=${session.paneId}`
-  const label = `${mark.glyph}${session.leftPct === null ? '' : ` ${session.leftPct}%`}`
+  const label = `${mark.glyph} ${session.state}${session.leftPct === null ? '' : ` ${session.leftPct}%`}`
   return <Text color={mark.color}>{link(label, href)}</Text>
 }
 
@@ -226,6 +229,7 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
             {working.map(session => (
               <SessionMark key={session.pid} session={session} />
             ))}
+            {refs !== '' && <Text color={C.muted}>│</Text>}
           </Box>
         )}
         {refs !== '' && (
@@ -359,7 +363,7 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
         {right}
       </Box>
       <Text color={C.muted} wrap="truncate-end">
-        ↑↓ move · space toggle · o open{REVIEW_BOT ? ` · v review · a ${autoReview ? 'manual' : 'auto'} reviews` : ''} · s sync · r reload · q quit
+        ↑↓ move · space toggle · o open · g go to session{REVIEW_BOT ? ` · v review · a ${autoReview ? 'manual' : 'auto'} reviews` : ''} · s sync · r reload · q quit
       </Text>
     </Box>
   )

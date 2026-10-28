@@ -168,16 +168,76 @@ export function newReviews<T extends SearchedPr>(markdown: string, fresh: T[]): 
 
 /**
  * Review rows for the fresh search, keeping each one already checked off. A submitted review drops the
- * request, so a checked row the search no longer returns is kept as written rather than deleted.
+ * request, so a checked row the search no longer returns is kept as written rather than deleted, and so is an
+ * unchecked one in `finished` (reviewed by you, merged or closed), checked off; any other dropped row is a
+ * withdrawn request and goes.
  */
-export function mergeReviews(markdown: string, fresh: Array<SearchedPr & { author: { login: string } }>): string[] {
+export function mergeReviews(
+  markdown: string,
+  fresh: Array<SearchedPr & { author: { login: string } }>,
+  finished: Set<string> = new Set(),
+): string[] {
   const existing = parsePlan(markdown).filter(item => item.section === 'Reviews' && item.isCheckbox)
-  const urlOf = (item: PlanItem) => Object.values(item.links)[0]
+  const urlOf = (item: PlanItem) => Object.values(item.links)[0] ?? ''
   const done = new Set(existing.filter(item => item.isDone).map(urlOf))
   const freshUrls = new Set(fresh.map(pr => pr.url))
   const rows = fresh.map(pr => `- [${done.has(pr.url) ? 'x' : ' '}] [${prLabel(pr)}](${pr.url}) ${pr.title} - @${pr.author.login}`)
-  const kept = existing.filter(item => item.isDone && !freshUrls.has(urlOf(item) ?? '')).map(item => item.raw)
+  const kept = existing
+    .filter(item => !freshUrls.has(urlOf(item)) && (item.isDone || finished.has(urlOf(item))))
+    .map(item => (item.isDone ? item.raw : item.raw.replace('- [ ]', '- [x]')))
   return [...rows, ...kept]
+}
+
+/** The unchecked Reviews rows the fresh search no longer returns: reviewed, merged, closed or withdrawn. */
+export function droppedReviews(markdown: string, fresh: SearchedPr[]): string[] {
+  const freshUrls = new Set(fresh.map(pr => pr.url))
+  return parsePlan(markdown)
+    .filter(item => item.section === 'Reviews' && item.isCheckbox && !item.isDone)
+    .map(item => Object.values(item.links)[0] ?? '')
+    .filter(url => url !== '' && !freshUrls.has(url))
+}
+
+const PULL = /^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+$/
+
+/** The PR a Plan or Nice to have row is about: the link it starts with, as PR rows are written. */
+export function rowPr(item: PlanItem): string | null {
+  for (const [label, href] of Object.entries(item.links)) {
+    if (PULL.test(href) && (item.text === label || item.text.startsWith(`${label} `))) return href
+  }
+  return null
+}
+
+/**
+ * Ticks each unchecked Plan and Nice to have row that is a PR `isMerged` says merged, then each parent whose
+ * sub-items are all ticked, deepest first. A row that only links a PR among other work is left for /sync-day to judge.
+ */
+export function tickMerged(markdown: string, isMerged: (url: string) => boolean): { markdown: string; ticked: string[] } {
+  const items = parsePlan(markdown).filter(item => item.isCheckbox && (item.section === 'Plan' || item.section === 'Nice to have'))
+  const done = new Set(items.filter(item => item.isDone).map(item => item.line))
+  const ticked: PlanItem[] = []
+  for (const item of items) {
+    const pr = rowPr(item)
+    if (!done.has(item.line) && pr !== null && isMerged(pr)) {
+      done.add(item.line)
+      ticked.push(item)
+    }
+  }
+  for (let index = items.length - 1; index >= 0; index--) {
+    const item = items[index]
+    if (item === undefined || done.has(item.line)) continue
+    const children: PlanItem[] = []
+    for (const next of items.slice(index + 1)) {
+      if (next.section !== item.section || next.depth <= item.depth) break
+      if (next.depth === item.depth + 1) children.push(next)
+    }
+    if (children.length > 0 && children.every(child => done.has(child.line))) {
+      done.add(item.line)
+      ticked.push(item)
+    }
+  }
+  let next = markdown
+  for (const item of ticked) next = toggleLine(next, item.line, item.raw) ?? next
+  return { markdown: next, ticked: ticked.map(item => item.text) }
 }
 
 /** Replaces a section's body, inserting it in template order when absent and dropping it when empty. */

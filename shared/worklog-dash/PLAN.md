@@ -54,7 +54,7 @@ busy, waiting on you, or idle, plus context left (for example `◐ busy · 64%`,
 - Probably `bun index.tsx --side` in `open_dashboard` (`wezterm.lua`) in place of broot. Cmd+Shift+O (re-root the tree)
   is then dropped, or kept for re-rooting the Claude pane.
 
-## Step 3 - move the mechanical half of /sync-day into the dashboard
+## Step 3 - move the mechanical half of /sync-day into the dashboard - done 2026-10-28
 
 The dashboard tab runs `claude "/loop 10m /sync-day"`. That takes over the Claude pane with its transcript and costs a
 model turn every 10 minutes (about 2% of usage on 2026-10-28). Split it:

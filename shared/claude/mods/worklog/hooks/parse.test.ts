@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import {
+  droppedReviews,
   mergeReviews,
   newReviews,
   parseConfig,
@@ -12,6 +13,7 @@ import {
   splitPr,
   splitRefs,
   ticketFrom,
+  tickMerged,
   ticketUrl,
   toggleLine,
 } from './parse'
@@ -172,6 +174,19 @@ describe('PR section sync', () => {
     ])
   })
 
+  test('keeps a dropped unchecked review you finished, checked off', async () => {
+    expect(mergeReviews(LOG, [pr(2)], new Set(['https://x/3']))).toEqual([
+      '- [x] [app#2](https://x/2) PR 2 - @dev',
+      '- [x] [app#1](https://x/1) Done and gone - @a',
+      '- [x] [app#3](https://x/3) Dropped - @c',
+    ])
+  })
+
+  test('droppedReviews lists unchecked rows the search no longer returns', async () => {
+    expect(droppedReviews(LOG, [pr(2)])).toEqual(['https://x/3'])
+    expect(droppedReviews(LOG, [pr(3)])).toEqual([])
+  })
+
   test('newReviews returns only requests the section does not list, checked or not', async () => {
     expect(newReviews(LOG, [pr(1), pr(2), pr(4)]).map(found => found.number)).toEqual([4])
   })
@@ -187,5 +202,33 @@ describe('PR section sync', () => {
   test('drops a section the search came back empty for', async () => {
     expect(replaceSection(LOG, 'Reviews', [])).toBe(['## Plan', '- [ ] Thing', '', '## Wrap-up', '(written by /wrap-day)'].join('\n'))
     expect(replaceSection(LOG, 'My open PRs', [])).toBe(LOG)
+  })
+})
+
+describe('tickMerged', () => {
+  const PLAN = [
+    '## Plan',
+    '- [ ] Ship the port ([ABC-1](https://tracker/ABC-1))',
+    '\t- [ ] [app#1](https://github.com/o/app/pull/1) Part one',
+    '\t- [x] [app#2](https://github.com/o/app/pull/2) Part two',
+    '- [ ] Port the UI from [app#3](https://github.com/o/app/pull/3) to here',
+    '- [ ] [app#4](https://github.com/o/app/pull/4) Still open',
+    '',
+  ].join('\n')
+  const merged = new Set(['https://github.com/o/app/pull/1', 'https://github.com/o/app/pull/3'])
+
+  test('ticks a merged PR row, then its parent once every sub-item is ticked', async () => {
+    const { markdown, ticked } = tickMerged(PLAN, url => merged.has(url))
+    expect(ticked).toEqual(['app#1 Part one', 'Ship the port (ABC-1)'])
+    expect(markdown.split('\n').slice(1, 3)).toEqual([
+      '- [x] Ship the port ([ABC-1](https://tracker/ABC-1))',
+      '\t- [x] [app#1](https://github.com/o/app/pull/1) Part one',
+    ])
+  })
+
+  test('leaves a row that only mentions a merged PR, and open PRs', async () => {
+    const { markdown } = tickMerged(PLAN, url => merged.has(url))
+    expect(markdown).toContain('- [ ] Port the UI from')
+    expect(markdown).toContain('- [ ] [app#4]')
   })
 })

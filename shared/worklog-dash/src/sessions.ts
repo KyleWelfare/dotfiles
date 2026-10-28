@@ -8,9 +8,27 @@ import { run } from './sync.ts'
 const SESSIONS_SCRIPT = join(homedir(), '.claude/skills/sessions/scripts/sessions.py')
 const WEZTERM = '/Applications/WezTerm.app/Contents/MacOS/wezterm'
 
-// A session belongs to a plan item only when one of its rows' ticket or PRs comes up in at least this many of its
-// recent prompts and replies; a few passing mentions (a review, a status report) shouldn't move it onto the plan.
-const MIN_TEXTS = 3
+// A session belongs to a plan item only when the item's ticket and PRs are most of what its recent prompts, replies and
+// tool calls mention, and at least this often. A session that discusses the plan (building this dashboard, /sync-day)
+// names many items, so no single one dominates; one working on an item names it far more than anything else.
+const MIN_MENTIONS = 5
+const MIN_SHARE = 0.5
+// Or when its title (Claude names a session after what it's doing) shares this many words, and this share of the
+// title's words, with the item's text.
+const MIN_TITLE_WORDS = 2
+const MIN_TITLE_SHARE = 0.6
+const STOP_WORDS = new Set(['a', 'an', 'and', 'the', 'to', 'of', 'for', 'from', 'in', 'on', 'with', 'into', 'up', 'it', 'its'])
+
+/** The title's meaningful words, crudely stemmed so "porting" meets "port" and "improvements" meets "improvement". */
+export function words(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(word => word.length > 1 && !STOP_WORDS.has(word))
+      .map(word => word.replace(/(ing|ed|s)$/, '')),
+  )
+}
 // Within an item, a sub-item takes the session when it has this share of the item's mentions; otherwise the parent.
 const CHILD_SHARE = 0.6
 
@@ -26,7 +44,7 @@ export type LiveSession = {
   title: string | null
   paneId: number | null
   isThis: boolean
-  mentions: Array<{ ref: string; texts: number }>
+  mentions: Array<{ ref: string; count: number }>
 }
 
 type RawSession = {
@@ -38,7 +56,7 @@ type RawSession = {
   kind: string
   said: string
   left_pct: number | null
-  mentions?: Array<{ ref: string; texts: number }>
+  mentions?: Array<{ ref: string; count: number }>
 }
 
 type Pane = { pane_id: number; tty_name?: string; title: string }
@@ -107,14 +125,34 @@ export function matchSessions(
   const byLine = new Map<number, LiveSession[]>()
   const other: LiveSession[] = []
   for (const session of sessions) {
-    const texts = new Map(session.mentions.map(m => [m.ref.toLowerCase(), m.texts]))
-    const score = (labels: Set<string>) => [...labels].reduce((sum, label) => sum + (texts.get(label) ?? 0), 0)
+    const all = session.mentions.reduce((sum, m) => sum + m.count, 0)
+    // A bare #123 (from a `gh pr` command) counts toward any label for PR 123.
+    const score = (labels: Set<string>) =>
+      session.mentions.reduce((sum, m) => {
+        const ref = m.ref.toLowerCase()
+        const hits = ref.startsWith('#') ? [...labels].some(label => label.endsWith(ref)) : labels.has(ref)
+        return hits ? sum + m.count : sum
+      }, 0)
+    const title = words(session.title ?? '')
+    let byTitle: { item: PlanItem; shared: number } | null = null
+    for (const group of groups) {
+      for (const row of group) {
+        const text = words(row.item.text)
+        const shared = [...title].filter(word => text.has(word)).length
+        if (shared >= MIN_TITLE_WORDS && shared >= title.size * MIN_TITLE_SHARE && (byTitle === null || shared > byTitle.shared)) {
+          byTitle = { item: row.item, shared }
+        }
+      }
+    }
+    if (byTitle !== null) {
+      byLine.set(byTitle.item.line, [...(byLine.get(byTitle.item.line) ?? []), session])
+      continue
+    }
     let best: { rows: Array<{ item: PlanItem; score: number }>; total: number } | null = null
     for (const group of groups) {
       const rows = group.map(row => ({ item: row.item, score: score(row.labels) }))
       const total = rows.reduce((sum, row) => sum + row.score, 0)
-      const strongest = Math.max(...rows.map(row => row.score))
-      if (strongest >= MIN_TEXTS && (best === null || total > best.total)) best = { rows, total }
+      if (total >= MIN_MENTIONS && total >= all * MIN_SHARE && (best === null || total > best.total)) best = { rows, total }
     }
     if (best === null) {
       other.push(session)

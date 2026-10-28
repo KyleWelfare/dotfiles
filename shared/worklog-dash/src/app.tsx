@@ -20,7 +20,7 @@ import {
   setAutoReview,
   tickReviews,
 } from './reviews.ts'
-import { type LiveSession, loadSessions, matchSessions } from './sessions.ts'
+import { type LiveSession, activateSession, loadSessions, matchSessions } from './sessions.ts'
 import { syncPrs } from './sync.ts'
 import { Dashboard, type SyncState, selectable } from './view.tsx'
 
@@ -101,6 +101,7 @@ export function App() {
 
   const rowsToWalk = day ? selectable(day) : []
   const selected = rowsToWalk[Math.min(cursor, rowsToWalk.length - 1)]
+  const byLine = day ? matchSessions(day.items, live).byLine : new Map<number, LiveSession[]>()
 
   useInput((input, key) => {
     if (input === 'q') exit()
@@ -113,6 +114,10 @@ export function App() {
       const review = href ? reviews[href] : undefined
       if (review?.status === 'ready' && CONFIG.github !== null && openSession(review, CONFIG.github)) return
       if (href) Bun.spawn(process.platform === 'win32' ? ['explorer.exe', href] : ['open', href])
+    } else if (input === 'g' && selected) {
+      // The first session on the row; a row rarely has two.
+      const session = byLine.get(selected.line)?.[0]
+      if (session) activateSession(session)
     } else if (input === 'a' && REVIEW_BOT !== null) {
       void setAutoReview(!autoReview).then(reload)
     } else if (input === 'v' && selected?.section === 'Reviews' && CONFIG.github !== null) {
@@ -129,6 +134,5 @@ export function App() {
   })
 
   if (day === null) return null
-  const { byLine } = matchSessions(day.items, live)
   return <Dashboard day={day} width={columns} height={rows} cursorLine={selected?.line ?? null} sync={sync} reviews={reviews} autoReview={autoReview} sessions={byLine} />
 }

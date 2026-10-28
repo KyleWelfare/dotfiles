@@ -318,8 +318,7 @@ local function open_dashboard(win, pane)
   main:split { direction = "Top", size = 0.28, top_level = true, cwd = DASH, args = dash_args("") }
   main:split { direction = "Left", size = 0.22, cwd = DASH, args = dash_args("--side") }
   main:activate()
-  -- The first prompt starts the worklog/Jira sync loop.
-  main:send_text('claude "/loop 10m /sync-day"\r')
+  main:send_text("claude\r")
 end
 
 -- Per-machine settings from shared/setup.ts. Read when used, so a rerun applies without a reload.
