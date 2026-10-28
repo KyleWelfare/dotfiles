@@ -1,10 +1,10 @@
 import { Box, Text } from 'ink'
 
 import type { PlanItem } from '@worklog-types'
-import { splitPr, splitRefs, ticketUrl } from '@worklog/parse.ts'
+import { splitPr, splitRefs, ticketFrom, ticketUrl } from '@worklog/parse.ts'
 
 import { CONFIG, type Day } from './log.ts'
-import { REVIEW_BOT, type ReviewEntry, isStale, resumeUrl } from './reviews.ts'
+import { REVIEW_BOT, type ReviewEntry, type ReviewerState, isStale, resumeUrl } from './reviews.ts'
 
 // Catppuccin Mocha, to match the WezTerm theme.
 const C = {
@@ -73,6 +73,34 @@ export type SyncState ={ isOff: boolean; isRunning: boolean; lastAt: string | nu
 /** The rows the cursor walks: every checkbox in Plan, Nice to have and Reviews, in file order. */
 export function selectable(day: Day): PlanItem[] {
   return day.items.filter(item => item.isCheckbox)
+}
+
+const REVIEWER_MARKS: Record<ReviewerState, { glyph: string; color: string }> = {
+  approved: { glyph: '✓', color: C.green },
+  changes: { glyph: '✗', color: C.red },
+  commented: { glyph: '◌', color: C.muted },
+}
+const MAX_REVIEWERS = 3
+
+/** Plan text with inline code shown without its backticks, in its own color, and **bold** as bold. */
+function Inline({ text, isMuted }: { text: string; isMuted: boolean }) {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((part, index) => {
+    if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <Text key={index} color={isMuted ? C.muted : C.peach}>
+          {part.slice(1, -1)}
+        </Text>
+      )
+    }
+    if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <Text key={index} bold>
+          {part.slice(2, -2)}
+        </Text>
+      )
+    }
+    return part
+  })
 }
 
 /** What the review bot is doing with a Reviews row; a ready one links to its session. */
@@ -155,7 +183,7 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
               backgroundColor={isCursor ? C.cursor : undefined}
               strikethrough={item.isDone}
             >
-              {title}
+              <Inline text={title} isMuted={item.isDone || isMuted} />
             </Text>
           </Text>
         </Box>
@@ -177,8 +205,27 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
   const prRow = (item: PlanItem) => {
     if (item.isCheckbox) {
       const { title } = splitRefs(item.text, item.links)
-      const [number = '', ...words] = title.split(' ')
-      const status = item.section === 'Reviews' ? reviewStatus(reviews[item.links[number] ?? '']) : null
+      const [number = '', ...rest] = title.split(' ')
+      // The ticket in a review title's leading [KEY] moves to the right, beside the bot status.
+      const prefix = /^\[([^\]]+)\]$/.exec(rest[0] ?? '')?.[1]
+      const ticket = prefix && CONFIG.tickets ? ticketFrom(prefix, CONFIG.tickets) : null
+      const words = ticket ? rest.slice(1) : rest
+      const review = item.section === 'Reviews' ? reviews[item.links[number] ?? ''] : undefined
+      const status = reviewStatus(review)
+      const others = review?.reviewers ?? []
+      const right = [
+        ...others.slice(0, MAX_REVIEWERS).map(reviewer => {
+          const state = REVIEWER_MARKS[reviewer.state]
+          return (
+            <Text key={reviewer.name}>
+              {reviewer.name} <Text color={state.color}>{state.glyph}</Text>
+            </Text>
+          )
+        }),
+        ...(others.length > MAX_REVIEWERS ? [<Text key="more">+{others.length - MAX_REVIEWERS}</Text>] : []),
+        ...(ticket && CONFIG.tickets ? [<Text key="ticket">{link(ticket, ticketUrl(CONFIG.tickets, ticket))}</Text>] : []),
+        ...(status ? [<Text key="status" color={status.color}>{link(status.text, status.href)}</Text>] : []),
+      ]
       // One Text per row: Ink drops a gap beside a colored symbol glyph and adds a blank line.
       return (
         <Box key={`row-${item.line}`} justifyContent="space-between" columnGap={2}>
@@ -194,9 +241,9 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
               </Text>
             </Text>
           </Box>
-          {status && (
+          {right.length > 0 && (
             <Box flexShrink={0}>
-              <Text color={status.color}>{link(status.text, status.href)}</Text>
+              <Text color={C.muted}>{right.flatMap((part, index) => (index === 0 ? [part] : [' · ', part]))}</Text>
             </Box>
           )}
         </Box>
@@ -205,10 +252,10 @@ export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoR
     const pr = splitPr(item.text)
     return (
       <Box key={`row-${item.line}`} justifyContent="space-between" columnGap={2}>
-        <Box flexShrink={1} columnGap={1}>
-          <Text color={C.blue}>{link(pr.number, item.links[pr.number])}</Text>
+        {/* One Text, so a long repo label truncates along with the title instead of wrapping in its own column. */}
+        <Box flexShrink={1}>
           <Text color={C.text} wrap="truncate-end">
-            {pr.title}
+            <Text color={C.blue}>{link(pr.number, item.links[pr.number])}</Text> {pr.title}
           </Text>
         </Box>
         <Box flexShrink={0}>

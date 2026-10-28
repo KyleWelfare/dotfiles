@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { countToAddress, isRerequested } from './reviews.ts'
+import { countToAddress, isRerequested, latestReviewStates } from './reviews.ts'
 
 describe('countToAddress', () => {
   test('counts top-level findings under Should address, stopping at the next tier', () => {
@@ -38,5 +38,21 @@ describe('isRerequested', () => {
   test('ignores older requests and other reviewers', () => {
     const timeline = ['2026-10-28T11:00:00Z\tKyleProdigy\t', '2026-10-28T13:00:00Z\tsomeoneElse\t', ''].join('\n')
     expect(isRerequested(timeline, since, 'KyleProdigy', 'giunity')).toBe(false)
+  })
+})
+
+describe('latestReviewStates', () => {
+  test("keeps each reviewer's latest decision, not a later comment", () => {
+    const lines = ['qing\tCOMMENTED', 'qing\tAPPROVED', 'qing\tCOMMENTED', 'jenn\tCHANGES_REQUESTED', 'sam\tCOMMENTED'].join('\n')
+    expect(latestReviewStates(lines, 'KyleProdigy')).toEqual([
+      { login: 'qing', state: 'approved' },
+      { login: 'jenn', state: 'changes' },
+      { login: 'sam', state: 'commented' },
+    ])
+  })
+
+  test('leaves out me, bots, pending and dismissed reviews', () => {
+    const lines = ['kyleprodigy\tAPPROVED', 'copilot[bot]\tCOMMENTED', 'qing\tPENDING', 'jenn\tDISMISSED'].join('\n')
+    expect(latestReviewStates(lines, 'KyleProdigy')).toEqual([])
   })
 })

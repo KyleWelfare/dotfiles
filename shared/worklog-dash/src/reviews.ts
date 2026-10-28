@@ -19,6 +19,7 @@ export const STATE_DIR = join(HOME, '.local/state/worklog-dash/reviews')
 const INDEX_PATH = join(STATE_DIR, 'index.json')
 const LOCK_PATH = join(STATE_DIR, 'lock')
 const SETTINGS_PATH = join(STATE_DIR, 'settings.json')
+const NAMES_PATH = join(STATE_DIR, 'names.json')
 const RUNS_DIR = join(STATE_DIR, 'runs')
 const CACHE_DIR = join(HOME, '.cache/worklog-dash')
 const CLONES_DIR = join(CACHE_DIR, 'repos')
@@ -48,6 +49,9 @@ export type ReviewBotConfig = {
 
 export type ReviewStatus = 'idle' | 'queued' | 'reviewing' | 'ready' | 'failed'
 
+export type ReviewerState = 'approved' | 'changes' | 'commented'
+export type Reviewer = { name: string; state: ReviewerState }
+
 export type ReviewEntry = {
   url: string
   repo: string
@@ -73,6 +77,10 @@ export type ReviewEntry = {
   /** The PR's updatedAt when it was last checked for new commits and re-requests. */
   updatedAt: string
   goneAt: string | null
+  /** Everyone else's latest review state, by first name; absent until the first sync that fetched them. */
+  reviewers?: Reviewer[]
+  /** The PR's updatedAt that `reviewers` reflects. */
+  reviewersAt?: string
 }
 
 type Index = Record<string, ReviewEntry>
@@ -206,8 +214,58 @@ const TIMELINE_JQ =
 
 let login: string | null = null
 
+/**
+ * Each other reviewer's latest state from `login\tSTATE` lines in review order. A comment after an approval or a
+ * change request doesn't undo it; pending and dismissed reviews, bots and `me` are left out.
+ */
+export function latestReviewStates(lines: string, me: string): Array<{ login: string; state: ReviewerState }> {
+  const states = new Map<string, ReviewerState>()
+  for (const line of lines.split('\n')) {
+    const [reviewer = '', raw = ''] = line.split('\t')
+    if (reviewer === '' || reviewer.endsWith('[bot]') || reviewer.toLowerCase() === me.toLowerCase()) continue
+    const state = raw === 'APPROVED' ? 'approved' : raw === 'CHANGES_REQUESTED' ? 'changes' : raw === 'COMMENTED' ? 'commented' : null
+    if (state === null || (state === 'commented' && states.has(reviewer))) continue
+    states.set(reviewer, state)
+  }
+  return [...states].map(([reviewer, state]) => ({ login: reviewer, state }))
+}
+
+let names: Record<string, string> | null = null
+
+/** A login's first name from its GitHub profile, cached on disk; the login itself when the profile has no name. */
+async function firstName(reviewer: string, env: Record<string, string>): Promise<string> {
+  names ??= await readFile(NAMES_PATH, 'utf8')
+    .then(text => JSON.parse(text) as Record<string, string>)
+    .catch(() => ({}))
+  const cached = names[reviewer]
+  if (cached !== undefined) return cached
+  const name = await ghText(['api', `users/${reviewer}`, '--jq', '.name // ""'], env)
+  if (name === null) return reviewer
+  const first = name.trim().split(/\s+/)[0] || reviewer
+  names[reviewer] = first
+  await writeFile(NAMES_PATH, `${JSON.stringify(names, null, 2)}\n`).catch(() => undefined)
+  return first
+}
+
+async function refreshReviewers(entry: ReviewEntry, pr: ReviewPr, env: Record<string, string>, me: string): Promise<void> {
+  const lines = await ghText(
+    ['api', '--paginate', `repos/${entry.repo}/pulls/${entry.number}/reviews?per_page=100`, '--jq', '.[] | [.user.login, .state] | @tsv'],
+    env,
+  )
+  if (lines === null) return
+  const states = latestReviewStates(lines, me)
+  entry.reviewers = await Promise.all(states.map(async ({ login: reviewer, state }) => ({ name: await firstName(reviewer, env), state })))
+  entry.reviewersAt = pr.updatedAt
+}
+
 /** Picks up new commits (the report goes stale, never re-run) and re-requests (queued again) on a PR that changed. */
-async function refresh(entry: ReviewEntry, pr: ReviewPr, github: GithubConfig, env: Record<string, string>, auto: boolean): Promise<void> {
+async function refresh(
+  entry: ReviewEntry,
+  pr: ReviewPr,
+  github: GithubConfig,
+  env: Record<string, string>,
+  { auto, me }: { auto: boolean; me: string },
+): Promise<void> {
   // A request made mid-run would be older than the run's requestedSince, so these wait until it ends.
   if (entry.status === 'queued' || entry.status === 'reviewing') return
   if (entry.sha !== null) {
@@ -221,13 +279,12 @@ async function refresh(entry: ReviewEntry, pr: ReviewPr, github: GithubConfig, e
       entry.commitsSince = ahead !== null && /^\d+$/.test(ahead) ? Number(ahead) : null
     }
   }
-  login ??= github.user ?? (await ghText(['api', 'user', '--jq', '.login'], env))
   const timeline = await ghText(
     ['api', '--paginate', `repos/${entry.repo}/issues/${entry.number}/timeline?per_page=100`, '--jq', TIMELINE_JQ],
     env,
   )
   if (timeline === null) return
-  if (isRerequested(timeline, entry.requestedSince, login ?? '', github.team)) {
+  if (isRerequested(timeline, entry.requestedSince, me, github.team)) {
     entry.status = auto ? 'queued' : 'idle'
     entry.attempts = 0
     // Moved past this request, so switching back to auto doesn't review what arrived while in manual.
@@ -429,15 +486,17 @@ export function reconcileReviews(requested: ReviewPr[], github: GithubConfig): P
     const index = await loadReviews()
     const now = new Date().toISOString()
     const env = await githubEnv(github)
+    if (env !== null) login ??= github.user ?? (await ghText(['api', 'user', '--jq', '.login'], env))
+    const me = login ?? ''
     for (const pr of requested) {
-      const entry = index[pr.url]
-      if (entry === undefined) {
-        index[pr.url] = newEntry(pr, isFirstRun || !auto ? 'idle' : 'queued', now)
-        continue
-      }
+      const existing = index[pr.url]
+      const entry = existing ?? newEntry(pr, isFirstRun || !auto ? 'idle' : 'queued', now)
+      index[pr.url] = entry
       entry.title = pr.title
       entry.goneAt = null
-      if (env !== null && pr.updatedAt !== entry.updatedAt) await refresh(entry, pr, github, env, auto)
+      if (env === null) continue
+      if (existing !== undefined && pr.updatedAt !== entry.updatedAt) await refresh(entry, pr, github, env, { auto, me })
+      if (pr.updatedAt !== entry.reviewersAt) await refreshReviewers(entry, pr, env, me)
     }
     const urls = new Set(requested.map(pr => pr.url))
     for (const entry of Object.values(index)) {

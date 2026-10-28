@@ -13,7 +13,7 @@ Plan from the 2026-10-28 dashboard review. Three steps, in order; steps 2 and 3 
 - Still open: a fine-grained read-only GitHub token for the review runs (`worklog.reviewBot.tokenFile`); without it they
   use the KyleProdigy token, so only the permission rules stop a write.
 
-## Step 1 - small fixes (one pass)
+## Step 1 - small fixes (one pass) - done 2026-10-28
 
 1. **PR row layout.** In My Open PRs, a long repo label pushes into the title and wraps
    (`arcadia-unity-packageIS-2804: ...` with `s#31` on its own line; the same for `Arcadia-Prototypes#73` and
