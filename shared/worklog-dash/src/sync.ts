@@ -9,15 +9,21 @@ import { appendEvent } from './log.ts'
 const PR_WINDOW_DAYS = 30
 const FAILING_CHECKS = new Set(['FAILURE', 'ERROR', 'TIMED_OUT'])
 
-type ReviewPr = SearchedPr & { author: { login: string }; isDraft: boolean }
+export type ReviewPr = SearchedPr & {
+  author: { login: string }
+  isDraft: boolean
+  repository: { name: string; nameWithOwner: string }
+  updatedAt: string
+}
 type MyPr = SearchedPr & { isDraft: boolean; repository: { name: string; nameWithOwner: string } }
 type CheckRun = { conclusion?: string | null; state?: string | null }
 type GhResult<T> = { value: T } | { error: string }
 type GithubConfig = NonNullable<WorklogConfig['github']>
 
-export type SyncResult = { error: string | null; requested: ReviewPr[] }
+/** `reviews` is every current review request, or null when either search failed. */
+export type SyncResult = { error: string | null; requested: ReviewPr[]; reviews: ReviewPr[] | null }
 
-async function run(argv: string[], env: Record<string, string> = {}) {
+export async function run(argv: string[], env: Record<string, string> = {}) {
   const proc = Bun.spawn(argv, { env: { ...process.env, ...env }, stdout: 'pipe', stderr: 'pipe', timeout: 60_000 })
   const [stdout, stderr, exitCode] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -32,7 +38,7 @@ async function run(argv: string[], env: Record<string, string> = {}) {
 const stripControl = (_key: string, value: unknown) =>
   typeof value === 'string' ? value.replace(/[\t\n\r]+/g, ' ').replace(/[\u0000-\u001f\u007f-\u009f]/g, '') : value
 
-async function ghText(args: string[], env: Record<string, string>): Promise<string | null> {
+export async function ghText(args: string[], env: Record<string, string>): Promise<string | null> {
   try {
     const { exitCode, stdout } = await run(['gh', ...args], env)
     return exitCode === 0 ? stdout.trim() : null
@@ -77,7 +83,7 @@ async function myPrRow(pr: MyPr, env: Record<string, string>): Promise<string> {
   return `- [${prLabel(pr)}](${pr.url}) ${pr.title} - ${state}`
 }
 
-function notify(title: string, body: string): void {
+export function notify(title: string, body: string): void {
   if (process.platform === 'win32') {
     // OSC 777, which WezTerm shows as a toast; it draws nothing, so Ink's frame is untouched.
     process.stdout.write(`\u001b]777;notify;${title};${body.replace(/[;\u0007\u001b]/g, ' ')}\u001b\\`)
@@ -85,6 +91,13 @@ function notify(title: string, body: string): void {
   }
   const quote = (text: string) => JSON.stringify(text)
   Bun.spawn(['osascript', '-e', `display notification ${quote(body)} with title ${quote(title)}`], { stdout: 'ignore', stderr: 'ignore' })
+}
+
+/** The env for gh calls: the configured account's token, null when gh has no login for it, or {} for the active one. */
+export async function githubEnv(github: GithubConfig): Promise<Record<string, string> | null> {
+  if (!github.user) return {}
+  const token = await ghText(['auth', 'token', '--user', github.user], {})
+  return token === null ? null : { GH_TOKEN: token }
 }
 
 /**
@@ -95,24 +108,20 @@ function notify(title: string, body: string): void {
  * which would blank both sections, so without a login for that account it writes nothing.
  */
 export async function syncPrs(path: string, date: string, github: GithubConfig, tickets: TicketConfig | null): Promise<SyncResult> {
-  let env: Record<string, string> = {}
-  if (github.user) {
-    const token = await ghText(['auth', 'token', '--user', github.user], {})
-    if (token === null) return { error: `gh has no login for ${github.user}`, requested: [] }
-    env = { GH_TOKEN: token }
-  }
+  const env = await githubEnv(github)
+  if (env === null) return { error: `gh has no login for ${github.user}`, requested: [], reviews: null }
   const since = new Date(Date.parse(`${date}T12:00:00Z`) - PR_WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10)
   const owner = github.org ? ['--owner', github.org] : []
   const search = ['search', 'prs', '--state', 'open', ...owner, '--updated', `>=${since}`, '--json']
   const teamSearch =
     github.org && github.team
-      ? ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft', `team-review-requested:${github.org}/${github.team}`], env)
+      ? ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft,updatedAt', `team-review-requested:${github.org}/${github.team}`], env)
       : Promise.resolve({ value: [] })
   // Only the team search can return your own PRs, so the login is looked up only for it.
   const login = github.user ?? (github.team ? ((await ghText(['api', 'user', '--jq', '.login'], env)) ?? '') : '')
 
   const [direct, team, mine] = await Promise.all([
-    ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft', '--review-requested', '@me'], env),
+    ghJson<ReviewPr[]>([...search, 'number,title,url,author,repository,isDraft,updatedAt', '--review-requested', '@me'], env),
     teamSearch,
     ghJson<MyPr[]>([...search, 'number,title,url,repository,isDraft', '--author', '@me'], env),
   ])
@@ -133,5 +142,5 @@ export async function syncPrs(path: string, date: string, github: GithubConfig, 
   }
 
   const error = 'error' in reviews ? reviews.error : 'error' in mine ? mine.error : null
-  return { error, requested }
+  return { error, requested, reviews: 'value' in reviews ? reviews.value : null }
 }

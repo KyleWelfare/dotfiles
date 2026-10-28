@@ -330,6 +330,28 @@ local function local_settings()
   return ok and type(parsed) == "table" and parsed or {}
 end
 
+-- A ready review's link in the dashboard (prreview://resume?...): resumes its headless session in a new tab, in
+-- the PR's worktree, with the PR sync's gh account. Only a UUID session and a path under the dashboard's worktree
+-- folder get through, since the link ends up in a shell command.
+local REVIEW_WORKTREES = wezterm.home_dir .. "/.cache/worklog-dash/wt/"
+wezterm.on("open-uri", function(window, pane, uri)
+  local session, cwd, title = uri:match("^prreview://resume%?session=([^&]+)&cwd=([^&]+)&title=([^&]*)$")
+  if not session then
+    if uri:match("^prreview:") then return false end
+    return
+  end
+  local decode = function(s) return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end)) end
+  cwd, title = decode(cwd), decode(title)
+  local is_uuid = session:match("^%x+%-%x+%-%x+%-%x+%-%x+$") ~= nil
+  local is_worktree = cwd:sub(1, #REVIEW_WORKTREES) == REVIEW_WORKTREES and cwd:match("^[%w%._/%-]+$") and not cwd:find("%.%.")
+  if not (is_uuid and is_worktree) then return false end
+  local user = ((local_settings().worklog or {}).github or {}).user
+  local token = type(user) == "string" and user:match("^[%w%-]+$") and ("GH_TOKEN=$(gh auth token --user " .. user .. ") ") or ""
+  local tab = window:mux_window():spawn_tab { cwd = cwd, args = { "/bin/zsh", "-lc", token .. "claude --resume " .. session } }
+  tab:set_title("review: " .. title)
+  return false
+end)
+
 -- Repo picker for the dashboard's file tree: re-roots the tab's broot pane at the chosen repo
 -- or worktree, so one dash tab covers every repo. The folders are local.json's repoGlobs.
 local function repo_choices()

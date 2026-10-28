@@ -11,6 +11,7 @@ type Local = {
     root?: string
     github?: { enabled?: boolean; user?: string; org?: string; team?: string }
     tickets?: { url?: string; pattern?: string }
+    reviewBot?: { enabled?: boolean; tokenFile?: string; [key: string]: unknown }
   }
   repoGlobs?: string[]
   [key: string]: unknown
@@ -59,6 +60,7 @@ const local = readLocal()
 const worklog = local.worklog ?? {}
 const github = worklog.github ?? {}
 const tickets = worklog.tickets ?? {}
+const reviewBot = worklog.reviewBot ?? {}
 
 console.log('Dotfiles setup. Enter keeps the value in brackets, "-" clears it.\n')
 
@@ -76,6 +78,13 @@ const ticketLink = ask('Ticket links: a URL with {id} where the ticket ID goes (
 const ticketPattern = ticketLink
   ? ask('Ticket ID regex (blank: uppercase keys such as ABC-123)', tickets.pattern ?? '')
   : (tickets.pattern ?? '')
+
+// Mac only: the dashboard runs these reviews detached and hands them to WezTerm.
+const reviewsOn =
+  prSync && !isWindows && /^y/i.test(ask('Review each new review request with /review in the background (y/n)', reviewBot.enabled ? 'y' : 'n'))
+const reviewToken = reviewsOn
+  ? ask('File holding a read-only GitHub token for the reviews (blank: the PR sync account)', reviewBot.tokenFile ?? '')
+  : (reviewBot.tokenFile ?? '')
 
 console.log('\nDashboard file tree')
 const globs = ask('Repo folders for the picker, comma separated, * allowed (such as ~/code/*)', (local.repoGlobs ?? []).join(', '))
@@ -95,6 +104,8 @@ const next: Local = {
     root,
     github: { enabled: prSync, user: ghUser, org: ghOrg, team: ghTeam },
     tickets: { url: ticketLink, pattern: ticketPattern },
+    // Spread so hand-set options (maxParallel, timeoutMinutes, model, sparseExclude) survive a rerun.
+    reviewBot: { ...reviewBot, enabled: reviewsOn, tokenFile: reviewToken },
   },
   repoGlobs: globs
     .split(',')

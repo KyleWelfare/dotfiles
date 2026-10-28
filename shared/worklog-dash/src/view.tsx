@@ -4,6 +4,7 @@ import type { PlanItem } from '@worklog-types'
 import { splitPr, splitRefs, ticketUrl } from '@worklog/parse.ts'
 
 import { CONFIG, type Day } from './log.ts'
+import { REVIEW_BOT, type ReviewEntry, isStale, resumeUrl } from './reviews.ts'
 
 // Catppuccin Mocha, to match the WezTerm theme.
 const C = {
@@ -34,6 +35,7 @@ const EVENT_ICONS: Record<string, { glyph: string; color: string }> = {
   session: { glyph: '◆', color: C.peach },
   decision: { glyph: '!', color: C.yellow },
   review: { glyph: '◎', color: C.accent },
+  'review-ready': { glyph: '●', color: C.green },
   unblock: { glyph: '→', color: C.green },
   investigation: { glyph: '?', color: C.teal },
 }
@@ -73,9 +75,39 @@ export function selectable(day: Day): PlanItem[] {
   return day.items.filter(item => item.isCheckbox)
 }
 
-type Props = { day: Day; width: number; height: number; cursorLine: number | null; sync: SyncState }
+/** What the review bot is doing with a Reviews row; a ready one links to its session. */
+function reviewStatus(entry: ReviewEntry | undefined): { text: string; color: string; href?: string } | null {
+  if (entry === undefined) return null
+  switch (entry.status) {
+    case 'idle':
+      return { text: 'v to review', color: C.muted }
+    case 'queued':
+      return { text: entry.error ? 'retrying' : 'queued', color: C.muted }
+    case 'reviewing':
+      return { text: `reviewing ${Math.max(0, Math.floor((Date.now() - Date.parse(entry.startedAt ?? '')) / 60_000))}m`, color: C.yellow }
+    case 'failed':
+      return { text: 'failed · v to retry', color: C.red }
+    case 'ready': {
+      const parts = ['report ready']
+      if (entry.toAddress !== null) parts.push(entry.toAddress === 0 ? 'nothing to address' : `${entry.toAddress} to address`)
+      const stale = isStale(entry)
+      if (stale) parts.push(entry.commitsSince ? `stale (${entry.commitsSince} commit${entry.commitsSince === 1 ? '' : 's'})` : 'stale')
+      return { text: parts.join(' · '), color: stale ? C.peach : C.green, href: resumeUrl(entry) }
+    }
+  }
+}
 
-export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
+type Props = {
+  day: Day
+  width: number
+  height: number
+  cursorLine: number | null
+  sync: SyncState
+  reviews: Record<string, ReviewEntry>
+  autoReview: boolean
+}
+
+export function Dashboard({ day, width, height, cursorLine, sync, reviews, autoReview }: Props) {
   if (!day.hasFile) {
     return (
       <Box flexDirection="column" paddingX={1}>
@@ -146,18 +178,28 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
     if (item.isCheckbox) {
       const { title } = splitRefs(item.text, item.links)
       const [number = '', ...words] = title.split(' ')
+      const status = item.section === 'Reviews' ? reviewStatus(reviews[item.links[number] ?? '']) : null
       // One Text per row: Ink drops a gap beside a colored symbol glyph and adds a blank line.
       return (
-        <Text key={`row-${item.line}`} wrap="truncate-end">
-          {mark(item)}{' '}
-          <Text
-            color={item.isDone ? C.muted : C.text}
-            backgroundColor={item.line === cursorLine ? C.cursor : undefined}
-            strikethrough={item.isDone}
-          >
-            {link(number, item.links[number])} {words.join(' ')}
-          </Text>
-        </Text>
+        <Box key={`row-${item.line}`} justifyContent="space-between" columnGap={2}>
+          <Box flexShrink={1}>
+            <Text wrap="truncate-end">
+              {mark(item)}{' '}
+              <Text
+                color={item.isDone ? C.muted : C.text}
+                backgroundColor={item.line === cursorLine ? C.cursor : undefined}
+                strikethrough={item.isDone}
+              >
+                {link(number, item.links[number])} {words.join(' ')}
+              </Text>
+            </Text>
+          </Box>
+          {status && (
+            <Box flexShrink={0}>
+              <Text color={status.color}>{link(status.text, status.href)}</Text>
+            </Box>
+          )}
+        </Box>
       )
     }
     const pr = splitPr(item.text)
@@ -176,7 +218,8 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
     )
   }
 
-  const syncLine = sync.isOff ? 'PR sync off' : sync.isRunning ? 'syncing…' : sync.lastAt ? `synced ${sync.lastAt}` : 'not synced'
+  const syncState = sync.isOff ? 'PR sync off' : sync.isRunning ? 'syncing…' : sync.lastAt ? `synced ${sync.lastAt}` : 'not synced'
+  const syncLine = REVIEW_BOT ? `${syncState} · reviews ${autoReview ? 'auto' : 'manual'}` : syncState
 
   const left = (
     <Box flexDirection="column" width={columnWidth} flexShrink={0}>
@@ -247,7 +290,7 @@ export function Dashboard({ day, width, height, cursorLine, sync }: Props) {
         {right}
       </Box>
       <Text color={C.muted} wrap="truncate-end">
-        ↑↓ move · space toggle · o open · s sync · r reload · q quit
+        ↑↓ move · space toggle · o open{REVIEW_BOT ? ` · v review · a ${autoReview ? 'manual' : 'auto'} reviews` : ''} · s sync · r reload · q quit
       </Text>
     </Box>
   )
