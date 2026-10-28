@@ -143,6 +143,12 @@ if [ "$HAS_JQ" -eq 1 ]; then
   CONTEXT_SIZE=$(echo "$input" | jq -r '.context_window.context_window_size // 200000' 2>/dev/null)
   USAGE=$(echo "$input" | jq '.context_window.current_usage' 2>/dev/null)
 
+  # Only the status line is told a session's window size; keep it for the sessions skill.
+  if [ -n "$session_id" ] && [ "$(echo "$input" | jq -r '.context_window.context_window_size // empty' 2>/dev/null)" != "" ]; then
+    mkdir -p "$HOME/.claude/cache/context-window" 2>/dev/null &&
+      printf '%s' "$CONTEXT_SIZE" > "$HOME/.claude/cache/context-window/$session_id" 2>/dev/null
+  fi
+
   if [ "$USAGE" != "null" ] && [ -n "$USAGE" ]; then
     # Calculate current context from current_usage fields
     # Formula: input_tokens + cache_creation_input_tokens + cache_read_input_tokens
